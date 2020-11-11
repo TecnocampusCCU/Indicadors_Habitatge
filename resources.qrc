@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/Indicadors_Habitatge" >
+        <file>icon.png</file>
+    </qresource>
+</RCC>
