@@ -81,7 +81,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.201111"
+Versio_modul = "V_Q3.201120"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -347,12 +347,6 @@ class Indicadors_Habitatge:
                 self.barraEstat_connectat()
                 cur = conn.cursor()
 
-                llista = ['DensitatHabitantsHabitatge', 'DensitatHabitatgeÀrea',
-                          'DensitatEdificis', 'DensitatPlanta0Area']
-                self.ompleCombos(self.dlg.comboIndicador, llista, "Selecciona un indicador")
-                llista = ['FinquesAnyConstruccioParcel·les']
-                self.ompleCombos(self.dlg.comboIndicador_2, llista, "Selecciona un indicador")
-
 
             except Exception as ex:
                 print("I am unable to connect to the database")
@@ -416,6 +410,12 @@ class Indicadors_Habitatge:
         self.dlg.Transparencia.setEnabled(True)
         self.dlg.comboIndicador.clear;
         self.dlg.comboIndicador_2.clear;
+        self.progress_changed(0)
+        llista = ['DensitatHabitantsHabitatge', 'DensitatHabitatgeÀrea',
+                  'DensitatEdificis', 'DensitatPlanta0Area']
+        self.ompleCombos(self.dlg.comboIndicador, llista, "Selecciona un indicador")
+        llista = ['FinquesAnyConstruccioParcel·les']
+        self.ompleCombos(self.dlg.comboIndicador_2, llista, "Selecciona un indicador")
 
     def on_click_ColorEtiqueta(self):
         """Aquesta funció obra un dialeg per poder triar el color del contorn de l'area que volem pintar. """
@@ -477,7 +477,7 @@ class Indicadors_Habitatge:
             WHERE fus."Superficie_Cons" IS NOT NULL'''
         elif currentComboText == 'DensitatPlanta0Area':
             return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",  ST_Area(geom), fp."Superficie_cons" AS "SupCons"
-            FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesPlantes" WHERE "Pis" IN ('0', 'BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')) AS fp ON "parcel"."UTM" = fp."UTM"
+            FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesPlantes" WHERE "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')) AS fp ON "parcel"."UTM" = fp."UTM"
             WHERE fp."Superficie_cons" IS NOT NULL AND fp."Superficie_cons" NOT LIKE '0' '''
 
         elif currentComboText == 'Indicador20':  # TODO
@@ -705,6 +705,7 @@ class Indicadors_Habitatge:
 
         QApplication.processEvents()
         Fitxer = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
+        self.progress_changed(0)
 
         '''Control d'errors'''
         llistaErrors = self.controlErrorsInput()
@@ -737,7 +738,7 @@ class Indicadors_Habitatge:
             sql = self.getIndicador2()
         #print(sql)
         QApplication.processEvents()
-
+        self.progress_changed(5)
 
         #uri.setConnection(host1, port1, nomBD1, usuari1, contra1)
         uri.setDataSource("", "(" + sql + ")", "geom", "", "id")
@@ -810,15 +811,16 @@ class Indicadors_Habitatge:
 
         else:
             capa = "PARCELES"
+        self.progress_changed(10)
         vlayer = QgsVectorLayer(uri.uri(False), capa, "postgres")
         vlayer = self.comprobarValidez(vlayer)
 
-        tipus = None
+        '''tipus = None
         fields = vlayer.fields()
         for x in range(len(fields)):
             if fields[x].name() == "SupCons":
                 tipus = fields[x].type()
-                break
+                break'''
 
         QApplication.processEvents()
         QgsProject.instance().addMapLayer(vlayer, False)
@@ -831,7 +833,7 @@ class Indicadors_Habitatge:
 
         # self.mostraSHPperPantalla(vlayer, capa)
         # aggregate( 'parcel__d8216d5a_58a0_459b_9247_584de5a9971c', 'sum',"SupCons", intersects(  $geometry , geometry( @parent)))
-
+        self.progress_changed(20)
         if self.dlg.tabWidget.currentIndex() == 1 or self.dlg.Cmb_Metode.currentText() == "PARCELES":#(self.dlg.Cmb_Metode.currentText() == "PARCELES" and self.dlg.comboIndicador.currentText() != "DensitatEdificis"):
             vlayer_resultat = vlayer
         else:
@@ -859,7 +861,7 @@ class Indicadors_Habitatge:
 
             print("Before Agregacion")
             print(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
-            vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", tipus, "sum")
+            vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum")
             print("After Agregacion")
             print(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
             QApplication.processEvents()
@@ -867,7 +869,7 @@ class Indicadors_Habitatge:
 
         # Transformar el vlayer_resultat a Shape para poder editarlo
         if vlayer_resultat.isValid():
-            # self.dlg.progressBar.setValue(75)
+            self.progress_changed(90)
             QApplication.processEvents()
             Area = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
             """Es crea un Shape a la carpeta temporal amb la data i hora actual"""
@@ -888,6 +890,7 @@ class Indicadors_Habitatge:
             vlayer_resultat = QgsVectorLayer(os.environ['TMP'] + "/Area_" + Area + ".shp", capa, "ogr")
 
         if self.dlg.tabWidget.currentIndex() == 0:
+            self.progress_changed(95)
             vlayer_resultat.startEditing()
             vlayer_resultat.addAttribute(QgsField('Indicador', QVariant.Double))
             vlayer_resultat.commitChanges()
@@ -896,33 +899,31 @@ class Indicadors_Habitatge:
             vlayer_resultat.startEditing()
             features = vlayer_resultat.getFeatures()
             index = self.getIndexField(vlayer_resultat, "Indicador")
-            #TODO Extraer método
-            if self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
-                for feature in features:
+
+            for feature in features:
+                if self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
                     unitat = int(feature.attribute("Habitants"))
-                    supCons = float(feature.attribute("SupCons"))
-                    if not self.dlg.inverse_ratio.isChecked():
-                        if unitat == 0:
-                            value = 0
-                        else:
-                            value = unitat / supCons
-                        vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+                else:
+                    unitat = float(feature.geometry().area())
+                supCons = feature.attribute("SupCons")
+                if type(supCons) is QVariant:
+                    supCons = supCons.Double
+                else:
+                    supCons = float(supCons)
+
+                if not self.dlg.inverse_ratio.isChecked():
+                    if unitat == 0:
+                        value = 0
                     else:
-                        value = supCons /unitat
-                        vlayer_resultat.changeAttributeValue(feature.id(), index, value)
-            else:
-                for feature in features:
-                    unitat = feature.geometry().area()
-                    supCons = float(feature.attribute("SupCons"))
-                    if not self.dlg.inverse_ratio.isChecked():
-                        if unitat == 0:
-                            value = 0
-                        else:
-                            value = supCons / unitat
-                        vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+                        value = supCons / unitat
+                    vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+                else:
+                    if supCons == 0:
+                        value = 0
                     else:
                         value = unitat /supCons
-                        vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+                    vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+
             vlayer_resultat.commitChanges()
 
         self.mostraSHPperPantalla(vlayer_resultat, capa)
@@ -950,12 +951,17 @@ class Indicadors_Habitatge:
             self.dlg.Progres.setVisible(False)
             self.dlg.lblEstatConn.setText('Connectat')
             self.dlg.lblEstatConn.setStyleSheet('border:1px solid #000000; background-color: #7fff7f')
+        self.progress_changed(100)
         self.barraEstat_connectat()
 
+    # Processing feedback
+    def progress_changed(self, progress):
+        # print(progress)
+        self.dlg.progressBar.setValue(progress)
 
     def Agregacio(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate):
         f = QgsProcessingFeedback()
-        # f.progressChanged.connect(self.progress_changed)
+        f.progressChanged.connect(self.progress_changed)
 
         alg = {
             'FIELD_LENGTH': 80,
@@ -986,7 +992,7 @@ class Indicadors_Habitatge:
                                 },
                                {'aggregate': 'first_value',
                                 'delimiter': ';',
-                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:=to_int("' + camp + '"), filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:=to_real("' + camp + '"), filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
                                 'length': -1,
                                 'name': camp,
                                 'precision': -1,
@@ -1009,20 +1015,20 @@ class Indicadors_Habitatge:
                                 'type': 10
                                 },
                                {'aggregate': 'first_value',
+                                'delimiter': ';',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:=to_real("' + camp + '"), filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'length': -1,
+                                'name': camp,
+                                'precision': -1,
+                                'type': tipus
+                                },
+                               {'aggregate': 'first_value',
                                 'delimiter': ',',
                                 'input': 'aggregate( \''+Entitat_Detall+'\', \'sum\',\"Habitants\", intersects( $geometry , geometry( @parent)))',
                                 'length': 0,
                                 'name': 'Habitants',
                                 'precision': 0,
-                                'type': 2},
-                               {'aggregate': 'first_value',
-                                'delimiter': ';',
-                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:="' + camp + '", filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
-                                'length': -1,
-                                'name': camp,
-                                'precision': -1,
-                                'type': tipus
-                                }],
+                                'type': 2}],
                 # 'AGGREGATES' : [{'aggregate': 'first_value', 'delimiter': ';', 'input': 'aggregate(layer:=\'Barris_7d071280_7e84_4d37_99bd_0eb61becb7d6\', aggregate:=\'concatenate\',expression:="nombarri", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')', 'length': 0, 'name': 'Nombarri', 'precision': 0, 'type': 10}],
                 'OUTPUT': 'memory:'
             }
