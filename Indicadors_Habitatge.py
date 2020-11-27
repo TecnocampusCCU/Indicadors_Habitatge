@@ -81,7 +81,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.201120"
+Versio_modul = "V_Q3.201127"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -91,7 +91,8 @@ schema = ""
 Fitxer = ""
 cur = None
 conn = None
-Path_Inicial=expanduser("~")
+Path_Inicial = expanduser("~")
+
 
 class Indicadors_Habitatge:
     """QGIS Plugin Implementation."""
@@ -129,6 +130,11 @@ class Indicadors_Habitatge:
         self.dlg.bt_inici.clicked.connect(self.on_click_Inici)
         self.dlg.comboConnexio.currentIndexChanged.connect(self.on_Change_ComboConn)
         self.dlg.color.clicked.connect(self.on_click_Color)
+        self.dlg.colorTag.clicked.connect(self.on_click_ColorEtiqueta)
+        self.dlg.CB_etiquetes.stateChanged.connect(self.on_checkAddTags)
+        self.dlg.RB_color.toggled.connect(self.on_checkRB_color)
+        self.dlg.RB_degradat.toggled.connect(self.on_checkRB_degradat)
+        self.dlg.Transparencia.valueChanged.connect(self.on_valuechange_Transparencia)
 
         # Declare instance attributes
         self.actions = []
@@ -395,6 +401,8 @@ class Indicadors_Habitatge:
         @param self:
         Resteja tots els valors per defecte del plugin: estat inicial.
         '''
+        global micolor
+        global micolorTag
         global aux
         global Versio_modul
         global itemSel
@@ -410,12 +418,68 @@ class Indicadors_Habitatge:
         self.dlg.Transparencia.setEnabled(True)
         self.dlg.comboIndicador.clear;
         self.dlg.comboIndicador_2.clear;
+        self.dlg.CB_etiquetes.setChecked(False)
+        self.dlg.Transparencia.setEnabled(True)
+        self.dlg.Transparencia_lbl.setText(str(self.dlg.Transparencia.value()) + ' %')
+        micolor = QColor(255, 0, 0, 255)
+        micolorTag = QColor(128, 0, 128, 255)
+        self.dlg.color.setStyleSheet('border:1px solid #000000; background-color: #ff0000')
+        self.dlg.colorTag.setStyleSheet('border:1px solid #000000; background-color: #800080')
+        self.dlg.min.setValue(1000.00)
+        self.dlg.max.setValue(50000.00)
         self.progress_changed(0)
         llista = ['DensitatHabitantsHabitatge', 'DensitatHabitatgeÀrea',
                   'DensitatEdificis', 'DensitatPlanta0Area']
         self.ompleCombos(self.dlg.comboIndicador, llista, "Selecciona un indicador")
         llista = ['FinquesAnyConstruccioParcel·les']
         self.ompleCombos(self.dlg.comboIndicador_2, llista, "Selecciona un indicador")
+
+    def on_checkRB_color(self, enabled):
+        if enabled:
+            self.dlg.color.setEnabled(True)
+            self.dlg.Transparencia.setEnabled(True)
+        else:
+            self.dlg.color.setEnabled(False)
+            self.dlg.Transparencia.setEnabled(True)
+
+    def on_checkAddTags(self, state):
+        '''Aquesta funcio habilita o deshabilitat els diferents elements de les etiquetes'''
+        if state != QtCore.Qt.Checked:
+            self.dlg.mida.setEnabled(False)
+            self.dlg.colorTag.setEnabled(False)
+            self.dlg.min.setEnabled(False)
+            self.dlg.max.setEnabled(False)
+        else:
+            self.dlg.mida.setEnabled(True)
+            self.dlg.colorTag.setEnabled(True)
+            self.dlg.min.setEnabled(True)
+            self.dlg.max.setEnabled(True)
+
+    def on_click_ColorEtiqueta(self):
+        """Aquesta funció obra un dialeg per poder triar el color del contorn de l'area que volem pintar. """
+        global micolorTag
+        aux = QColorDialog.getColor()
+        if aux.isValid():
+            micolorTag = aux
+        estilo = 'border:1px solid #000000; background-color: ' + micolorTag.name()
+        self.dlg.colorTag.setStyleSheet(estilo)
+        self.dlg.colorTag.setAutoFillBackground(True)
+        pep = self.dlg.colorTag.palette().color(1)
+        pass
+
+    def on_checkRB_degradat(self, enabled):
+        if enabled:
+            self.dlg.ColorDegradat.setEnabled(True)
+            self.dlg.LE_rang.setEnabled(True)
+            self.dlg.combo_Tipus.setEnabled(True)
+        else:
+            self.dlg.ColorDegradat.setEnabled(False)
+            self.dlg.LE_rang.setEnabled(False)
+            self.dlg.combo_Tipus.setEnabled(False)
+
+    def on_valuechange_Transparencia(self):
+        """Aquesta es una funcio auxiliar que canvia el valor de la etiqueta associada a la transperencia de la capa escollida"""
+        self.dlg.Transparencia_lbl.setText(str(self.dlg.Transparencia.value()) + ' %')
 
     def on_click_ColorEtiqueta(self):
         """Aquesta funció obra un dialeg per poder triar el color del contorn de l'area que volem pintar. """
@@ -461,31 +525,31 @@ class Indicadors_Habitatge:
                 errors.append("No hi ha indicador")
         return errors
 
-    def getIndicador(self,fitxer):
+    def getIndicador(self, fitxer):
         currentComboText = self.dlg.comboIndicador.currentText()
         if currentComboText == 'DensitatHabitantsHabitatge':
             return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons",  tr."Habitants"
-            FROM "parcel"  LEFT JOIN "tr_temp'''+fitxer+'''" AS tr ON "parcel"."UTM" = tr."Parcela" LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM"
+            FROM "parcel"  LEFT JOIN "tr_temp''' + fitxer + '''" AS tr ON "parcel"."UTM" = tr."Parcela" LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM"
             WHERE fus."Superficie_Cons" IS NOT NULL AND tr."Habitants" IS NOT NULL'''
         elif currentComboText == 'DensitatHabitatgeÀrea':
             return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons", fus."Superficie_Nocons" AS "SupNocons", ST_Area(geom)
             FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM"
             WHERE fus."Superficie_Cons" IS NOT NULL'''
         elif currentComboText == 'DensitatEdificis':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons", fus."Superficie_Nocons", ST_Area(geom)
+            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM",  SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons", SUM(fus."Superficie_Nocons"::INTEGER) AS "SupNoCons"
             FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
-            WHERE fus."Superficie_Cons" IS NOT NULL'''
+            WHERE fus."Superficie_Cons" IS NOT NULL
+            GROUP BY "parcel"."geom", "parcel"."UTM"'''
         elif currentComboText == 'DensitatPlanta0Area':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",  ST_Area(geom), fp."Superficie_cons" AS "SupCons"
+            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM", SUM(fp."Superficie_cons"::INTEGER) AS "SupCons"
             FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesPlantes" WHERE "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')) AS fp ON "parcel"."UTM" = fp."UTM"
-            WHERE fp."Superficie_cons" IS NOT NULL AND fp."Superficie_cons" NOT LIKE '0' '''
-
+            WHERE fp."Superficie_cons" IS NOT NULL AND fp."Superficie_cons" NOT LIKE '0' 
+            GROUP BY "parcel"."geom", "parcel"."UTM"'''
         elif currentComboText == 'Indicador20':  # TODO
             return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons", fus."Superficie_Nocons", ST_Area(geom), fus."Us"
             FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
             WHERE fus."Superficie_Cons" IS NOT NULL
             ORDER BY "UTM"'''
-
 
     def getIndicador2(self):
         currentComboText = self.dlg.comboIndicador_2.currentText()
@@ -525,8 +589,6 @@ class Indicadors_Habitatge:
                 return "metre quadrat/metres quadrats"
         elif currentComboText == 'FinquesAnyConstruccioParcel·les':
             return ""
-
-
 
     def mostraSHPperPantalla(self, vlayer, capa):
         global nomBD1
@@ -628,7 +690,7 @@ class Indicadors_Habitatge:
                     layer_settings.setFormat(text_format)
 
                     layer_settings.isExpression = True
-                    layer_settings.fieldName = "to_string(Indicador)+ ' unitats'"
+                    layer_settings.fieldName = "Indicador"#"to_string(Indicador)+ '  " + self.getUnitats() + "'"
                     # vlayer.setCustomProperty("labeling/isExpression", True)
                     # vlayer.setCustomProperty("labeling/fieldName", "to_string(densitat_9)+ ' hab/km^2'")
                     QApplication.processEvents()
@@ -663,8 +725,11 @@ class Indicadors_Habitatge:
             template = "An exception of type {0} occurred. Arguments:\n{1!r}"
             message = template.format(type(ex).__name__, ex.args)
             print(message)
+            self.progress_changed(0)
+            self.dlg.setEnabled(True)
+            self.barraEstat_connectat()
             QMessageBox.information(None, "Error",
-                                    "No s'ha pogut modificar la TaulaResum de la base de dades.\nComprova els privilegis que tens.")
+                                    "Error mostrant el vlayer per pantalla.")
 
     def getIndexField(self, vlayer, fieldName):
         fields = vlayer.fields()
@@ -719,6 +784,7 @@ class Indicadors_Habitatge:
 
         self.barraEstat_processant()
 
+        self.dlg.setEnabled(False)
         uri = QgsDataSourceUri()
         try:
             uri.setConnection(host1, port1, nomBD1, usuari1, contra1)
@@ -730,17 +796,19 @@ class Indicadors_Habitatge:
             QMessageBox.information(None, "Error", "Error a la connexio")
             conn.rollback()
             self.dlg.setEnabled(True)
+            self.progress_changed(0)
+            self.barraEstat_connectat()
             return
 
         if self.dlg.tabWidget.currentIndex() == 0:
             sql = self.getIndicador(Fitxer)
         else:
             sql = self.getIndicador2()
-        #print(sql)
+        # print(sql)
         QApplication.processEvents()
         self.progress_changed(5)
 
-        #uri.setConnection(host1, port1, nomBD1, usuari1, contra1)
+        # uri.setConnection(host1, port1, nomBD1, usuari1, contra1)
         uri.setDataSource("", "(" + sql + ")", "geom", "", "id")
         if self.dlg.tabWidget.currentIndex() == 0:
             capa = self.dlg.Cmb_Metode.currentText()
@@ -774,11 +842,11 @@ class Indicadors_Habitatge:
                                 conn.commit()
                                 # print "ok"
                             except Exception as ex:
-                                print("I am unable to connect to the database")
+                                print("Problem reading csv")
                                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
                                 message = template.format(type(ex).__name__, ex.args)
                                 print(message)
-                                QMessageBox.information(None, "Error", "I am unable to connect to the database")
+                                QMessageBox.information(None, "Error", "Problem reading csv")
                                 conn.rollback()
                                 self.eliminaTaulesCalcul(Fitxer)
 
@@ -800,13 +868,9 @@ class Indicadors_Habitatge:
                                                                     Path_Inicial + "\\", QFileDialog.ShowDirsOnly)
                     else:
                         print("Cancelat")
-                        self.bar.setEnabled(True)
-                        self.bar.clearWidgets()
-                        self.dlg.Progres.setVisible(False)
-                        self.dlg.Progres.setValue(0)
-
+                        self.progress_changed(0)
                         self.dlg.setEnabled(True)
-                        self.bar.clearWidgets()
+                        self.barraEstat_connectat()
                         return
 
         else:
@@ -834,11 +898,12 @@ class Indicadors_Habitatge:
         # self.mostraSHPperPantalla(vlayer, capa)
         # aggregate( 'parcel__d8216d5a_58a0_459b_9247_584de5a9971c', 'sum',"SupCons", intersects(  $geometry , geometry( @parent)))
         self.progress_changed(20)
-        if self.dlg.tabWidget.currentIndex() == 1 or self.dlg.Cmb_Metode.currentText() == "PARCELES":#(self.dlg.Cmb_Metode.currentText() == "PARCELES" and self.dlg.comboIndicador.currentText() != "DensitatEdificis"):
+        if self.dlg.tabWidget.currentIndex() == 1 or self.dlg.Cmb_Metode.currentText() == "PARCELES":  # (self.dlg.Cmb_Metode.currentText() == "PARCELES" and self.dlg.comboIndicador.currentText() != "DensitatEdificis"):
             vlayer_resultat = vlayer
         else:
             if self.dlg.Cmb_Metode.currentText() == "ILLES":
-                uri.setDataSource("", "(SELECT * FROM \"ILLES\")", "geom", "", "id")
+                uri.setDataSource("", "(SELECT * FROM \"ILLES\" WHERE \"D_S_I\" NOT LIKE '' AND \"D_S_I\" IS NOT NULL)",
+                                  "geom", "", "id")
             elif self.dlg.Cmb_Metode.currentText() == "PARCELES":
                 uri.setDataSource("", "(SELECT * FROM \"parcel\")", "geom", "", "id")
             elif self.dlg.Cmb_Metode.currentText() == "SECCIONS":
@@ -921,7 +986,7 @@ class Indicadors_Habitatge:
                     if supCons == 0:
                         value = 0
                     else:
-                        value = unitat /supCons
+                        value = unitat / supCons
                     vlayer_resultat.changeAttributeValue(feature.id(), index, value)
 
             vlayer_resultat.commitChanges()
@@ -946,13 +1011,13 @@ class Indicadors_Habitatge:
             print(message)
             QMessageBox.information(None, "Error", "Error DROP final")
             conn.rollback()
-            self.bar.clearWidgets()
-            self.dlg.Progres.setValue(0)
-            self.dlg.Progres.setVisible(False)
-            self.dlg.lblEstatConn.setText('Connectat')
-            self.dlg.lblEstatConn.setStyleSheet('border:1px solid #000000; background-color: #7fff7f')
+            self.progress_changed(0)
+            self.dlg.setEnabled(True)
+            self.barraEstat_connectat()
         self.progress_changed(100)
         self.barraEstat_connectat()
+        self.dlg.setEnabled(True)
+
 
     # Processing feedback
     def progress_changed(self, progress):
@@ -1024,7 +1089,7 @@ class Indicadors_Habitatge:
                                 },
                                {'aggregate': 'first_value',
                                 'delimiter': ',',
-                                'input': 'aggregate( \''+Entitat_Detall+'\', \'sum\',\"Habitants\", intersects( $geometry , geometry( @parent)))',
+                                'input': 'aggregate( \'' + Entitat_Detall + '\', \'sum\',\"Habitants\", intersects( $geometry , geometry( @parent)))',
                                 'length': 0,
                                 'name': 'Habitants',
                                 'precision': 0,
@@ -1056,7 +1121,7 @@ class Indicadors_Habitatge:
                 'FIELD': 'UUID',
                 'INPUT_2': pep['OUTPUT'],
                 'FIELD_2': 'UUID',
-                'FIELDS_TO_COPY': [camp,"Habitants"],
+                'FIELDS_TO_COPY': [camp, "Habitants"],
                 'METHOD': 1,
                 'DISCARD_NONMATCHING': False,
                 'PREFIX': '',
