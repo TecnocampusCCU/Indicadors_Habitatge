@@ -414,6 +414,8 @@ class Indicadors_Habitatge:
         self.dlg.Cmb_Metode.setCurrentIndex(0)
         self.dlg.tabWidget.setCurrentIndex(0)
         self.dlg.RB_color.setChecked(True)
+        self.dlg.inverse_ratio.setChecked(False)
+        self.dlg.checkbox_media.setChecked(False)
         self.dlg.color.setEnabled(True)
         self.dlg.Transparencia.setEnabled(True)
         self.dlg.comboIndicador.clear;
@@ -699,7 +701,7 @@ class Indicadors_Habitatge:
                     layer_settings.setFormat(text_format)
 
                     layer_settings.isExpression = True
-                    layer_settings.fieldName = "round( \"Indicador\","+self.dlg.decimals.text()+")" #"to_string(Indicador)+ '  " + self.getUnitats() + "'"
+                    layer_settings.fieldName = "round( \"Indicador\"," + self.dlg.decimals.text() + ")"  # "to_string(Indicador)+ '  " + self.getUnitats() + "'"
                     # vlayer.setCustomProperty("labeling/isExpression", True)
                     # vlayer.setCustomProperty("labeling/fieldName", "to_string(densitat_9)+ ' hab/km^2'")
                     QApplication.processEvents()
@@ -758,6 +760,7 @@ class Indicadors_Habitatge:
         result = processing.run('qgis:checkvalidity', parameters)
 
         return result['VALID_OUTPUT']
+
 
     def on_click_Inici(self):
         '''
@@ -973,9 +976,11 @@ class Indicadors_Habitatge:
             vlayer_resultat.startEditing()
             features = vlayer_resultat.getFeatures()
             index = self.getIndexField(vlayer_resultat, "Indicador")
-
+            supConsTotal = 0
+            unitatTotal = 0
+            '''INDICADOR'''
             for feature in features:
-                if (feature.attribute("SupCons")== None):
+                if (feature.attribute("SupCons") == None):
                     vlayer_resultat.deleteFeature(feature.id())
                     continue
                 if self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
@@ -998,7 +1003,27 @@ class Indicadors_Habitatge:
                         value = 0
                     else:
                         value = unitat / supCons
+                supConsTotal += supCons
+                unitatTotal += unitat
                 vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+
+            '''MEDIA'''
+            if self.dlg.checkbox_media.isChecked():
+                if not self.dlg.inverse_ratio.isChecked():
+                    if unitatTotal == 0:
+                        media = 0
+                    else:
+                        media = supConsTotal / unitatTotal
+                else:
+                    if supConsTotal == 0:
+                        media = 0
+                    else:
+                        media = unitatTotal / supConsTotal
+                print(media)
+                if media != 0:
+                    for feature in vlayer_resultat.getFeatures():
+                        vlayer_resultat.changeAttributeValue(feature.id(), index,
+                                                             feature.attribute("Indicador") / media * 100)
 
             vlayer_resultat.commitChanges()
 
@@ -1028,7 +1053,6 @@ class Indicadors_Habitatge:
         self.progress_changed(100)
         self.barraEstat_connectat()
         self.dlg.setEnabled(True)
-
 
     # Processing feedback
     def progress_changed(self, progress):

@@ -907,6 +907,19 @@
       </item>
      </widget>
     </widget>
+    <widget class="QCheckBox" name="checkbox_media">
+     <property name="geometry">
+      <rect>
+       <x>100</x>
+       <y>100</y>
+       <width>281</width>
+       <height>17</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Valor relatiu respecte a la mitjana de la ciutat en %</string>
+     </property>
+    </widget>
    </widget>
    <widget class="QWidget" name="tab_2">
     <attribute name="title">
