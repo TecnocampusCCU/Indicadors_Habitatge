@@ -81,7 +81,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.201202"
+Versio_modul = "V_Q3.201203"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -420,6 +420,7 @@ class Indicadors_Habitatge:
         self.dlg.Transparencia.setEnabled(True)
         self.dlg.comboIndicador.clear;
         self.dlg.comboIndicador_2.clear;
+        self.dlg.comboIndicador_3.clear;
         self.dlg.CB_etiquetes.setChecked(False)
         self.dlg.mida.setEnabled(False)
         self.dlg.colorTag.setEnabled(False)
@@ -435,13 +436,23 @@ class Indicadors_Habitatge:
         self.dlg.min.setValue(500.00)
         self.dlg.max.setValue(50000.00)
         self.progress_changed(0)
-        self.dlg.LE_rang.setText("5")
-        self.dlg.decimals.setText("2")
         llista = ['DensitatHabitantsHabitatge', 'DensitatHabitatgeÀrea',
                   'DensitatEdificis', 'DensitatPlanta0Area']
         self.ompleCombos(self.dlg.comboIndicador, llista, "Selecciona un indicador")
         llista = ['FinquesAnyConstruccioParcel·les']
         self.ompleCombos(self.dlg.comboIndicador_2, llista, "Selecciona un indicador")
+        llista = ['MapaAlçadesParcel·la']
+        self.ompleCombos(self.dlg.comboIndicador_3, llista, "Selecciona un indicador")
+        self.SetTooltipIndicadors()
+
+    def SetTooltipIndicadors(self):
+        self.dlg.comboIndicador.setItemData(1,"Sup. construïda amb ús d'habitatge/nombre d'habitants",QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador.setItemData(2,"Sup. construïda amb ús d'habitatge/Sup. geomètrica (solar)",QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador.setItemData(3,"Sup. construïda per a qualsevol ús/Sup. geometrica (solar)",QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador.setItemData(4,"Sup. construïda en planta baixa/Sup. geomètrica (solar)",QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador_2.setItemData(1,"Any construcció parcel·la",QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador_3.setItemData(1,"Nombre de plantes edifici mes alt de la parcel·la",QtCore.Qt.ToolTipRole)
+
 
     def on_checkRB_color(self, enabled):
         if enabled:
@@ -531,8 +542,12 @@ class Indicadors_Habitatge:
                 errors.append("No hi ha mètode de treball")
             if self.dlg.comboIndicador.currentText() == 'Selecciona un indicador' or self.dlg.comboIndicador.currentText() == '':
                 errors.append("No hi ha indicador")
-        else:
+
+        elif self.dlg.tabWidget.currentIndex() == 1:
             if self.dlg.comboIndicador_2.currentText() == 'Selecciona un indicador' or self.dlg.comboIndicador.currentText() == '':
+                errors.append("No hi ha indicador")
+        else:
+            if self.dlg.comboIndicador_3.currentText() == 'Selecciona un indicador' or self.dlg.comboIndicador.currentText() == '':
                 errors.append("No hi ha indicador")
         return errors
 
@@ -567,22 +582,44 @@ class Indicadors_Habitatge:
         if currentComboText == 'FinquesAnyConstruccioParcel·les':
             return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM", 
              fac."Any_constr" AS "Indicador" FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesAnyConstruccio" 
-             WHERE "Any_constr" BETWEEN \'''' + self.dlg.any_inici.text() + '\' AND \'' + self.dlg.any_fi.text() + '''\')
+             WHERE "Any_constr" BETWEEN \'''' + str(self.dlg.any_inici.value()) + '\' AND \'' + str(self.dlg.any_fi.value()) + '''\')
               AS fac ON "parcel"."UTM" = fac."UTM" 
               WHERE fac."Any_constr" IS NOT NULL 
               ORDER BY 4'''
 
+    def getIndicador3(self):
+        currentComboText = self.dlg.comboIndicador_3.currentText()
+        if currentComboText == 'MapaAlçadesParcel·la':
+            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM", alt."Indicador"
+            FROM "parcel" LEFT JOIN
+            (SELECT "UTM", MAX(
+            CASE
+            WHEN "Pis" ~ '^[0-9\.]+$' THEN
+            CAST ("Pis" AS INTEGER)
+            ELSE
+            0
+            END)+1 AS "Indicador",
+            SUM("Superficie_cons"::INTEGER) AS "Superficie_cons"
+            FROM "FinquesPlantes"
+            WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
+            GROUP BY "UTM")
+            AS alt ON "parcel"."UTM" = alt."UTM" 
+            WHERE alt."Indicador" IS NOT NULL AND alt."Superficie_cons" != 0 
+            ORDER BY 4'''
+
     def getUnitats(self):
         if self.dlg.tabWidget.currentIndex() == 0:
             currentComboText = self.dlg.comboIndicador.currentText()
-        else:
+        elif self.dlg.tabWidget.currentIndex() == 1:
             currentComboText = self.dlg.comboIndicador_2.currentText()
+        else:
+            currentComboText = self.dlg.comboIndicador_3.currentText()
 
         if currentComboText == 'DensitatHabitantsHabitatge':
             if not self.dlg.inverse_ratio.isChecked():
-                return "habitant/metres quadrats"
-            else:
                 return "metres quadrats/habitant"
+            else:
+                return "habitant/metres quadrats"
         elif currentComboText == 'DensitatHabitatgeÀrea':
             if not self.dlg.inverse_ratio.isChecked():
                 return "metres quadrats/metre quadrat"
@@ -600,6 +637,9 @@ class Indicadors_Habitatge:
                 return "metre quadrat/metres quadrats"
         elif currentComboText == 'FinquesAnyConstruccioParcel·les':
             return ""
+        elif currentComboText == 'MapaAlçadesParcel·la':
+            return ""
+        return ""
 
     def mostraSHPperPantalla(self, vlayer, capa):
         global nomBD1
@@ -610,10 +650,8 @@ class Indicadors_Habitatge:
         global micolorTag
         uri = QgsDataSourceUri()
         try:
-            # self.dlg.progressBar.setValue(70)
             QApplication.processEvents()
             if vlayer.isValid():
-                # self.dlg.progressBar.setValue(75)
                 QApplication.processEvents()
                 Area = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
                 """Es crea un Shape a la carpeta temporal amb la data i hora actual"""
@@ -636,15 +674,12 @@ class Indicadors_Habitatge:
                 symbol = symbols[0]
                 if self.dlg.RB_color.isChecked():
                     symbol.setColor(self.dlg.color.palette().color(1))
-                    # opa = self.dlg.Transparencia.value()
-                    # vlayer.setOpacity(0.5)
                     vlayer.setOpacity(self.dlg.Transparencia.value() / 100)
-                    # self.dlg.progressBar.setValue(80)
                 else:
                     fieldname = "Indicador"
                     template = "%1 - %2 " + self.getUnitats()
 
-                    numberOfClasses = int(float(self.dlg.LE_rang.text()))
+                    numberOfClasses = int(float(self.dlg.LE_rang.value()))
                     myRangeList = []
                     mysymbol = QgsFillSymbol()
                     if (self.dlg.ColorDegradat.currentText() == 'Gris'):
@@ -687,7 +722,6 @@ class Indicadors_Habitatge:
                     renderer.setLabelFormat(format, True)
                     vlayer.setOpacity(self.dlg.Transparencia.value() / 100)
                     vlayer.setRenderer(renderer)
-                    # self.dlg.progressBar.setValue(80)
                     QApplication.processEvents()
 
                 if self.dlg.CB_etiquetes.isChecked():
@@ -701,9 +735,9 @@ class Indicadors_Habitatge:
                     layer_settings.setFormat(text_format)
 
                     layer_settings.isExpression = True
-                    layer_settings.fieldName = "round( \"Indicador\"," + self.dlg.decimals.text() + ")"  # "to_string(Indicador)+ '  " + self.getUnitats() + "'"
-                    # vlayer.setCustomProperty("labeling/isExpression", True)
-                    # vlayer.setCustomProperty("labeling/fieldName", "to_string(densitat_9)+ ' hab/km^2'")
+                    layer_settings.fieldName = "to_string(round( \"Indicador\"," + str(self.dlg.decimals.value()) + "))"
+                    if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
+                        layer_settings.fieldName += "+'%'"
                     QApplication.processEvents()
 
                     layer_settings.placement = 1
@@ -719,7 +753,6 @@ class Indicadors_Habitatge:
 
                     vlayer.triggerRepaint()
 
-                # self.dlg.progressBar.setValue(85)
                 QApplication.processEvents()
                 QgsProject.instance().addMapLayer(vlayer, False)
                 root = QgsProject.instance().layerTreeRoot()
@@ -727,7 +760,6 @@ class Indicadors_Habitatge:
                 root.insertChildNode(0, myLayerNode)
                 myLayerNode.setCustomProperty("showFeatureCount", True)
                 iface.mapCanvas().refresh()
-                # qgis.utils.iface.legendInterface().refreshLayerSymbology(vlayer)
             else:
                 print("Error vector layer")
             QApplication.processEvents()
@@ -814,17 +846,18 @@ class Indicadors_Habitatge:
 
         if self.dlg.tabWidget.currentIndex() == 0:
             sql = self.getIndicador(Fitxer)
-        else:
+        elif self.dlg.tabWidget.currentIndex() == 1:
             sql = self.getIndicador2()
-        # print(sql)
+        else:
+            sql = self.getIndicador3()
         QApplication.processEvents()
         self.progress_changed(5)
 
-        # uri.setConnection(host1, port1, nomBD1, usuari1, contra1)
         uri.setDataSource("", "(" + sql + ")", "geom", "", "id")
         if self.dlg.tabWidget.currentIndex() == 0:
             capa = self.dlg.Cmb_Metode.currentText()
 
+            '''Buscar archivo de parcelas'''
             if (self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge'):
                 path = QFileDialog.getExistingDirectory(self.dlg,
                                                         "Busca la carpeta que conté els arxius provinents del mòdul TAULA RESUM",
@@ -891,12 +924,6 @@ class Indicadors_Habitatge:
         vlayer = QgsVectorLayer(uri.uri(False), capa, "postgres")
         vlayer = self.comprobarValidez(vlayer)
 
-        '''tipus = None
-        fields = vlayer.fields()
-        for x in range(len(fields)):
-            if fields[x].name() == "SupCons":
-                tipus = fields[x].type()
-                break'''
 
         QApplication.processEvents()
         QgsProject.instance().addMapLayer(vlayer, False)
@@ -907,12 +934,12 @@ class Indicadors_Habitatge:
         QApplication.processEvents()
         iface.mapCanvas().refresh()
 
-        # self.mostraSHPperPantalla(vlayer, capa)
-        # aggregate( 'parcel__d8216d5a_58a0_459b_9247_584de5a9971c', 'sum',"SupCons", intersects(  $geometry , geometry( @parent)))
+
         self.progress_changed(20)
-        if self.dlg.tabWidget.currentIndex() == 1 or self.dlg.Cmb_Metode.currentText() == "PARCELES":  # (self.dlg.Cmb_Metode.currentText() == "PARCELES" and self.dlg.comboIndicador.currentText() != "DensitatEdificis"):
+        if not self.dlg.tabWidget.currentIndex() == 0 or self.dlg.Cmb_Metode.currentText() == "PARCELES":
             vlayer_resultat = vlayer
         else:
+            '''Agregación en función del método de trabajo'''
             if self.dlg.Cmb_Metode.currentText() == "ILLES":
                 uri.setDataSource("", "(SELECT * FROM \"ILLES\" WHERE \"D_S_I\" NOT LIKE '' AND \"D_S_I\" IS NOT NULL)",
                                   "geom", "", "id")
@@ -944,7 +971,7 @@ class Indicadors_Habitatge:
             QApplication.processEvents()
             QgsProject.instance().removeMapLayers([entitatResum.id()])
 
-        # Transformar el vlayer_resultat a Shape para poder editarlo
+        '''Transformación del vlayer_resultat a Shape para poder editarlo'''
         if vlayer_resultat.isValid():
             self.progress_changed(90)
             QApplication.processEvents()
@@ -973,12 +1000,12 @@ class Indicadors_Habitatge:
             vlayer_resultat.commitChanges()
             vlayer_resultat.updateFields()
 
+            '''Cálculo del Indicador'''
             vlayer_resultat.startEditing()
             features = vlayer_resultat.getFeatures()
             index = self.getIndexField(vlayer_resultat, "Indicador")
             supConsTotal = 0
             unitatTotal = 0
-            '''INDICADOR'''
             for feature in features:
                 if (feature.attribute("SupCons") == None):
                     vlayer_resultat.deleteFeature(feature.id())
@@ -1008,7 +1035,7 @@ class Indicadors_Habitatge:
                 vlayer_resultat.changeAttributeValue(feature.id(), index, value)
 
             '''MEDIA'''
-            if self.dlg.checkbox_media.isChecked():
+            if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
                 if not self.dlg.inverse_ratio.isChecked():
                     if unitatTotal == 0:
                         media = 0
@@ -1056,7 +1083,6 @@ class Indicadors_Habitatge:
 
     # Processing feedback
     def progress_changed(self, progress):
-        # print(progress)
         self.dlg.progressBar.setValue(progress)
 
     def Agregacio(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate):
@@ -1074,7 +1100,6 @@ class Indicadors_Habitatge:
             'OUTPUT': 'memory:'
         }
         ILLES_UNIQUE = processing.run('qgis:fieldcalculator', alg)  # , feedback=f)
-        # QgsProject.instance().addMapLayer(ILLES_UNIQUE['OUTPUT'])
 
         operador = operacio_aggregate
         if not (self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge'):
@@ -1098,7 +1123,6 @@ class Indicadors_Habitatge:
                                 'precision': -1,
                                 'type': tipus
                                 }],
-                # 'AGGREGATES' : [{'aggregate': 'first_value', 'delimiter': ';', 'input': 'aggregate(layer:=\'Barris_7d071280_7e84_4d37_99bd_0eb61becb7d6\', aggregate:=\'concatenate\',expression:="nombarri", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')', 'length': 0, 'name': 'Nombarri', 'precision': 0, 'type': 10}],
                 'OUTPUT': 'memory:'
             }
         else:
@@ -1129,15 +1153,11 @@ class Indicadors_Habitatge:
                                 'name': 'Habitants',
                                 'precision': 0,
                                 'type': 2}],
-                # 'AGGREGATES' : [{'aggregate': 'first_value', 'delimiter': ';', 'input': 'aggregate(layer:=\'Barris_7d071280_7e84_4d37_99bd_0eb61becb7d6\', aggregate:=\'concatenate\',expression:="nombarri", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')', 'length': 0, 'name': 'Nombarri', 'precision': 0, 'type': 10}],
                 'OUTPUT': 'memory:'
             }
 
-        # print (alg_params)
         pep = processing.run('qgis:aggregate', alg_params, feedback=f)
-        # QgsProject.instance().addMapLayer(pep['OUTPUT'])
 
-        # 'output_84afc2ff_07a0_4771_9dd7_570fcd85e1dc',
         if not (self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge'):
             alg = {
                 'INPUT': ILLES_UNIQUE['OUTPUT'],
@@ -1162,11 +1182,8 @@ class Indicadors_Habitatge:
                 'PREFIX': '',
                 'OUTPUT': 'memory:'
             }
-        # print(alg)
         pep2 = processing.run('native:joinattributestable', alg)  # , feedback=f)
-        # QgsProject.instance().addMapLayer(pep2['OUTPUT'])
 
-        # QgsProject.instance().addMapLayer(pep['OUTPUT'])
         alg = {
             'INPUT': pep2['OUTPUT'],
             'COLUMN': 'UUID',
