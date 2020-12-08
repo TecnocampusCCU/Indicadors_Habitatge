@@ -81,7 +81,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.201203"
+Versio_modul = "V_Q3.201208"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -582,7 +582,7 @@ class Indicadors_Habitatge:
         if currentComboText == 'FinquesAnyConstruccioParcel·les':
             return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM", 
              fac."Any_constr" AS "Indicador" FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesAnyConstruccio" 
-             WHERE "Any_constr" BETWEEN \'''' + str(self.dlg.any_inici.value()) + '\' AND \'' + str(self.dlg.any_fi.value()) + '''\')
+             WHERE "Any_constr" BETWEEN \'''' + str(int(self.dlg.any_inici.value())) + '\' AND \'' + str(int(self.dlg.any_fi.value())) + '''\')
               AS fac ON "parcel"."UTM" = fac."UTM" 
               WHERE fac."Any_constr" IS NOT NULL 
               ORDER BY 4'''
@@ -609,6 +609,8 @@ class Indicadors_Habitatge:
 
     def getUnitats(self):
         if self.dlg.tabWidget.currentIndex() == 0:
+            if (self.dlg.checkbox_media.isChecked()):
+                return "%"
             currentComboText = self.dlg.comboIndicador.currentText()
         elif self.dlg.tabWidget.currentIndex() == 1:
             currentComboText = self.dlg.comboIndicador_2.currentText()
@@ -627,9 +629,9 @@ class Indicadors_Habitatge:
                 return "metre quadrat/metres quadrats"
         elif currentComboText == 'DensitatEdificis':
             if not self.dlg.inverse_ratio.isChecked():
-                return "%"
+                return "metres quadrats/metre quadrat"
             else:
-                return "%"
+                return "metre quadrat/metres quadrats"
         elif currentComboText == 'DensitatPlanta0Area':
             if not self.dlg.inverse_ratio.isChecked():
                 return "metres quadrats/metre quadrat"
