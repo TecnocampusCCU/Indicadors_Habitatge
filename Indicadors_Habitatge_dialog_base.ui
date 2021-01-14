@@ -809,7 +809,7 @@
     </rect>
    </property>
    <property name="currentIndex">
-    <number>2</number>
+    <number>0</number>
    </property>
    <widget class="QWidget" name="tab">
     <attribute name="title">
@@ -912,6 +912,11 @@
       <item>
        <property name="text">
         <string>DISTRICTES POSTALS</string>
+       </property>
+      </item>
+      <item>
+       <property name="text">
+        <string>DISTRICTES INE</string>
        </property>
       </item>
      </widget>

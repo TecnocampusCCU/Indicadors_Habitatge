@@ -81,7 +81,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.201208"
+Versio_modul = "V_Q3.210114"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -567,10 +567,10 @@ class Indicadors_Habitatge:
             WHERE fus."Superficie_Cons" IS NOT NULL
             GROUP BY "parcel"."geom", "parcel"."UTM"'''
         elif currentComboText == 'DensitatPlanta0Area':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM", SUM(fp."Superficie_cons"::INTEGER) AS "SupCons"
+            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM", SUM(fp."Superficie_cons"::INTEGER) AS "SupCons", "Pis"
             FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesPlantes" WHERE "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')) AS fp ON "parcel"."UTM" = fp."UTM"
             WHERE fp."Superficie_cons" IS NOT NULL AND fp."Superficie_cons" NOT LIKE '0' 
-            GROUP BY "parcel"."geom", "parcel"."UTM"'''
+            GROUP BY "parcel"."geom", "parcel"."UTM", "Pis"'''
         elif currentComboText == 'Indicador20':  # TODO
             return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons", fus."Superficie_Nocons", ST_Area(geom), fus."Us"
             FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
@@ -590,7 +590,7 @@ class Indicadors_Habitatge:
     def getIndicador3(self):
         currentComboText = self.dlg.comboIndicador_3.currentText()
         if currentComboText == 'MapaAlçadesParcel·la':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM", alt."Indicador"
+            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM", alt."Indicador", alt."Pis", alt."SupCons"
             FROM "parcel" LEFT JOIN
             (SELECT "UTM", MAX(
             CASE
@@ -598,13 +598,13 @@ class Indicadors_Habitatge:
             CAST ("Pis" AS INTEGER)
             ELSE
             0
-            END)+1 AS "Indicador",
-            SUM("Superficie_cons"::INTEGER) AS "Superficie_cons"
+            END)+1 AS "Indicador", "Pis",
+            SUM("Superficie_cons"::INTEGER) AS "SupCons"
             FROM "FinquesPlantes"
             WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
-            GROUP BY "UTM")
+            GROUP BY "UTM", "Pis")
             AS alt ON "parcel"."UTM" = alt."UTM" 
-            WHERE alt."Indicador" IS NOT NULL AND alt."Superficie_cons" != 0 
+            WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0 
             ORDER BY 4'''
 
     def getUnitats(self):
@@ -951,8 +951,10 @@ class Indicadors_Habitatge:
                 uri.setDataSource("", "(SELECT * FROM \"Seccions\")", "geom", "", "id")
             elif self.dlg.Cmb_Metode.currentText() == "BARRIS":
                 uri.setDataSource("", "(SELECT * FROM \"Barris\")", "geom", "", "id")
-            else:
+            elif self.dlg.Cmb_Metode.currentText() == "DISTRICTES POSTALS":
                 uri.setDataSource("", "(SELECT * FROM \"DistrictesPostals\")", "geom", "", "id")
+            else:
+                uri.setDataSource("", "(SELECT * FROM \"Districtes\")", "geom", "", "id")
 
             entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
             entitatResum = self.comprobarValidez(entitatResum)
@@ -1012,7 +1014,7 @@ class Indicadors_Habitatge:
                 if (feature.attribute("SupCons") == None):
                     vlayer_resultat.deleteFeature(feature.id())
                     continue
-                if self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
+                if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
                     unitat = int(feature.attribute("Habitants"))
                 else:
                     unitat = float(feature.geometry().area())
@@ -1021,7 +1023,8 @@ class Indicadors_Habitatge:
                     supCons = supCons.Double
                 else:
                     supCons = float(supCons)
-
+                if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatPlanta0Area' and supCons > float(feature.geometry().area()):
+                    supCons = float(feature.geometry().area())
                 if not self.dlg.inverse_ratio.isChecked():
                     if unitat == 0:
                         value = 0
@@ -1054,6 +1057,17 @@ class Indicadors_Habitatge:
                         vlayer_resultat.changeAttributeValue(feature.id(), index,
                                                              feature.attribute("Indicador") / media * 100)
 
+            vlayer_resultat.commitChanges()
+
+
+        if self.dlg.tabWidget.currentIndex() == 2:
+            vlayer_resultat.startEditing()
+            features = vlayer_resultat.getFeatures()
+            for feature in features:
+                if feature.attribute("Pis") == "OD":
+                    index = self.getIndexField(vlayer_resultat, "Indicador")
+                    value = int(feature.attribute("SupCons")/float(feature.geometry().area())) + 1
+                    vlayer_resultat.changeAttributeValue(feature.id(), index, value)
             vlayer_resultat.commitChanges()
 
         self.mostraSHPperPantalla(vlayer_resultat, capa)
