@@ -60,6 +60,7 @@ from qgis.core import QgsWkbTypes
 from qgis.core import QgsVectorLayerExporter
 from qgis.core import QgsProcessingFeedback
 from qgis.core import QgsFeature
+from qgis.core import Qgis
 import psycopg2
 import unicodedata
 import datetime
@@ -81,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210114"
+Versio_modul = "V_Q3.210212"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -135,6 +136,7 @@ class Indicadors_Habitatge:
         self.dlg.RB_color.toggled.connect(self.on_checkRB_color)
         self.dlg.RB_degradat.toggled.connect(self.on_checkRB_degradat)
         self.dlg.Transparencia.valueChanged.connect(self.on_valuechange_Transparencia)
+        self.dlg.tabWidget.currentChanged.connect(self.on_currentchange_tab)
 
         # Declare instance attributes
         self.actions = []
@@ -304,6 +306,12 @@ class Indicadors_Habitatge:
         boto.setChecked(False)
         boto.setStyleSheet('background-color: rgb(255, 156, 156)')
 
+    def on_currentchange_tab(self):
+        if self.dlg.tabWidget.currentIndex() == 2:
+            self.dlg.Metodes.setEnabled(False)
+        else:
+            self.dlg.Metodes.setEnabled(True)
+
     def on_Change_ComboConn(self):
         """
         En el moment en que es modifica la opcio escollida 
@@ -436,6 +444,7 @@ class Indicadors_Habitatge:
         self.dlg.min.setValue(500.00)
         self.dlg.max.setValue(50000.00)
         self.progress_changed(0)
+        self.dlg.Metodes.setEnabled(True)
         llista = ['DensitatHabitantsHabitatge', 'DensitatHabitatgeÀrea',
                   'DensitatEdificis', 'DensitatPlanta0Area']
         self.ompleCombos(self.dlg.comboIndicador, llista, "Selecciona un indicador")
@@ -544,6 +553,8 @@ class Indicadors_Habitatge:
                 errors.append("No hi ha indicador")
 
         elif self.dlg.tabWidget.currentIndex() == 1:
+            if self.dlg.Cmb_Metode.currentText() == 'Selecciona Mètode' or self.dlg.Cmb_Metode.currentText() == '':
+                errors.append("No hi ha mètode de treball")
             if self.dlg.comboIndicador_2.currentText() == 'Selecciona un indicador' or self.dlg.comboIndicador.currentText() == '':
                 errors.append("No hi ha indicador")
         else:
@@ -571,21 +582,23 @@ class Indicadors_Habitatge:
             FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesPlantes" WHERE "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')) AS fp ON "parcel"."UTM" = fp."UTM"
             WHERE fp."Superficie_cons" IS NOT NULL AND fp."Superficie_cons" NOT LIKE '0' 
             GROUP BY "parcel"."geom", "parcel"."UTM", "Pis"'''
-        elif currentComboText == 'Indicador20':  # TODO
-            return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons", fus."Superficie_Nocons", ST_Area(geom), fus."Us"
-            FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
-            WHERE fus."Superficie_Cons" IS NOT NULL
-            ORDER BY "UTM"'''
+
 
     def getIndicador2(self):
         currentComboText = self.dlg.comboIndicador_2.currentText()
         if currentComboText == 'FinquesAnyConstruccioParcel·les':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM", 
-             fac."Any_constr" AS "Indicador" FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesAnyConstruccio" 
-             WHERE "Any_constr" BETWEEN \'''' + str(int(self.dlg.any_inici.value())) + '\' AND \'' + str(int(self.dlg.any_fi.value())) + '''\')
-              AS fac ON "parcel"."UTM" = fac."UTM" 
-              WHERE fac."Any_constr" IS NOT NULL 
-              ORDER BY 4'''
+            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM",
+            SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons", SUM(fus."Superficie_Nocons"::INTEGER) AS "SupNoCons",
+            fac."Any_constr", (SUM(fus."Superficie_Cons"::INTEGER) * fac."Any_constr"::INTEGER) AS "SCxAC"
+            FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
+            LEFT JOIN (SELECT "UTM", MAX("Any_constr") AS "Any_constr"
+            FROM  "FinquesAnyConstruccio"  
+            WHERE "Any_constr" 
+            BETWEEN \'''' + str(int(self.dlg.any_inici.value())) + '\' AND \'' + str(int(self.dlg.any_fi.value())) + '''\'
+            GROUP BY "UTM") AS fac ON "parcel"."UTM" = fac."UTM" 
+            WHERE fus."Superficie_Cons" IS NOT NULL AND fac."Any_constr" IS NOT NULL 
+            GROUP BY "parcel"."geom", "parcel"."UTM", fac."Any_constr"'''
+
 
     def getIndicador3(self):
         currentComboText = self.dlg.comboIndicador_3.currentText()
@@ -697,7 +710,7 @@ class Indicadors_Habitatge:
 
                     format = QgsRendererRangeLabelFormat()
 
-                    precision = 2
+                    precision = 0
                     format.setFormat(template)
                     format.setPrecision(precision)
                     format.setTrimTrailingZeroes(False)
@@ -795,6 +808,31 @@ class Indicadors_Habitatge:
 
         return result['VALID_OUTPUT']
 
+    def MediaPonderada(self, vlayer):
+        vlayer.startEditing()
+        vlayer.addAttribute(QgsField('Any_constr', QVariant.Int))
+        vlayer.commitChanges()
+        vlayer.updateFields()
+
+        vlayer.startEditing()
+        features = vlayer.getFeatures()
+        index = self.getIndexField(vlayer, "Any_constr")
+        for feature in features:
+            unitat = int(feature.attribute("SCxAC"))
+            supCons = feature.attribute("SupCons")
+            if type(supCons) is QVariant:
+                supCons = supCons.Double
+            else:
+                supCons = float(supCons)
+
+            if supCons == 0:
+                value = 0
+            else:
+                value = unitat / supCons
+            vlayer.changeAttributeValue(feature.id(), index, value)
+        vlayer.commitChanges()
+        return vlayer
+
 
     def on_click_Inici(self):
         '''
@@ -848,97 +886,93 @@ class Indicadors_Habitatge:
 
         if self.dlg.tabWidget.currentIndex() == 0:
             sql = self.getIndicador(Fitxer)
+            indicador = self.dlg.comboIndicador.currentText()
         elif self.dlg.tabWidget.currentIndex() == 1:
             sql = self.getIndicador2()
+            indicador = self.dlg.comboIndicador_2.currentText()
         else:
             sql = self.getIndicador3()
+            indicador = self.dlg.comboIndicador_3.currentText()
         QApplication.processEvents()
         self.progress_changed(5)
 
         uri.setDataSource("", "(" + sql + ")", "geom", "", "id")
-        if self.dlg.tabWidget.currentIndex() == 0:
+        if self.dlg.tabWidget.currentIndex() == 2:
+            capa = "PARCELES"
+        else:
             capa = self.dlg.Cmb_Metode.currentText()
 
-            '''Buscar archivo de parcelas'''
-            if (self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge'):
-                path = QFileDialog.getExistingDirectory(self.dlg,
-                                                        "Busca la carpeta que conté els arxius provinents del mòdul TAULA RESUM",
-                                                        Path_Inicial + "\\",
-                                                        QFileDialog.ShowDirsOnly)
-                trobat = True
-                a = time.time()
-                while trobat:
-                    if (path != ''):
-                        if (os.path.exists(path + "\\tr_parceles.csv")):
-                            trobat = False
+        '''Buscar archivo de parcelas'''
+        if self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge' and self.dlg.tabWidget.currentIndex() == 0:
+            path = QFileDialog.getExistingDirectory(self.dlg,
+                                                    "Busca la carpeta que conté els arxius provinents del mòdul TAULA RESUM",
+                                                    Path_Inicial + "\\",
+                                                    QFileDialog.ShowDirsOnly)
+            trobat = True
+            a = time.time()
+            while trobat:
+                if (path != ''):
+                    if (os.path.exists(path + "\\tr_parceles.csv")):
+                        trobat = False
 
-                            arxiu = open(path + "\\tr_parceles.csv", 'r')
-                            dummy = arxiu.readline()
-                            lines = arxiu.readlines()
-                            try:
-                                """Creació de la taula temporal Resum_Temp_(data) de les dades del CSV de la taula resum de parceles"""
-                                cur.execute(
-                                    "CREATE TABLE \"tr_temp" + Fitxer + "\" (\"Parcela\" varchar(20), \"Habitants\" numeric);")
-                                conn.commit()
-                                insert = ""
-                                for linia in lines:
-                                    vec = linia.split(';', 20)
-                                    insert += "INSERT INTO \"tr_temp" + Fitxer + "\" (\"Parcela\", \"Habitants\") VALUES ('" + \
-                                              vec[0] + "', " + vec[1] + ");\n"
-                                cur.execute(insert)
-                                conn.commit()
-                                # print "ok"
-                            except Exception as ex:
-                                print("Problem reading csv")
-                                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
-                                message = template.format(type(ex).__name__, ex.args)
-                                print(message)
-                                QMessageBox.information(None, "Error", "Problem reading csv")
-                                conn.rollback()
-                                self.eliminaTaulesCalcul(Fitxer)
+                        arxiu = open(path + "\\tr_parceles.csv", 'r')
+                        dummy = arxiu.readline()
+                        lines = arxiu.readlines()
+                        try:
+                            """Creació de la taula temporal Resum_Temp_(data) de les dades del CSV de la taula resum de parceles"""
+                            cur.execute(
+                                "CREATE TABLE \"tr_temp" + Fitxer + "\" (\"Parcela\" varchar(20), \"Habitants\" numeric);")
+                            conn.commit()
+                            insert = ""
+                            for linia in lines:
+                                vec = linia.split(';', 20)
+                                insert += "INSERT INTO \"tr_temp" + Fitxer + "\" (\"Parcela\", \"Habitants\") VALUES ('" + \
+                                          vec[0] + "', " + vec[1] + ");\n"
+                            cur.execute(insert)
+                            conn.commit()
+                            # print "ok"
+                        except Exception as ex:
+                            print("Problem reading csv")
+                            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                            message = template.format(type(ex).__name__, ex.args)
+                            print(message)
+                            QMessageBox.information(None, "Error", "Problem reading csv")
+                            conn.rollback()
+                            self.eliminaTaulesCalcul(Fitxer)
 
-                                self.bar.clearWidgets()
-                                self.dlg.Progres.setValue(0)
-                                self.dlg.Progres.setVisible(False)
-                                self.dlg.lblEstatConn.setText('Connectat')
-                                self.dlg.lblEstatConn.setStyleSheet(
-                                    'border:1px solid #000000; background-color: #7fff7f')
-                                self.dlg.setEnabled(True)
-                                return
+                            self.bar.clearWidgets()
+                            self.dlg.Progres.setValue(0)
+                            self.dlg.Progres.setVisible(False)
+                            self.dlg.lblEstatConn.setText('Connectat')
+                            self.dlg.lblEstatConn.setStyleSheet(
+                                'border:1px solid #000000; background-color: #7fff7f')
+                            self.dlg.setEnabled(True)
+                            return
 
-                            arxiu.close()
-                            arxiuLlegit = True
-                        else:
-                            print("No hi ha l'arxiu")
-                            path = QFileDialog.getExistingDirectory(self.dlg,
-                                                                    "Busca la carpeta que conté els arxius provinents del mòdul TAULA RESUM",
-                                                                    Path_Inicial + "\\", QFileDialog.ShowDirsOnly)
+                        arxiu.close()
+                        arxiuLlegit = True
                     else:
-                        print("Cancelat")
-                        self.progress_changed(0)
-                        self.dlg.setEnabled(True)
-                        self.barraEstat_connectat()
-                        return
+                        print("No hi ha l'arxiu")
+                        path = QFileDialog.getExistingDirectory(self.dlg,
+                                                                "Busca la carpeta que conté els arxius provinents del mòdul TAULA RESUM",
+                                                                Path_Inicial + "\\", QFileDialog.ShowDirsOnly)
+                else:
+                    print("Cancelat")
+                    self.progress_changed(0)
+                    self.dlg.setEnabled(True)
+                    self.barraEstat_connectat()
+                    return
 
-        else:
-            capa = "PARCELES"
         self.progress_changed(10)
         vlayer = QgsVectorLayer(uri.uri(False), capa, "postgres")
         vlayer = self.comprobarValidez(vlayer)
 
-
         QApplication.processEvents()
         QgsProject.instance().addMapLayer(vlayer, False)
-        root = QgsProject.instance().layerTreeRoot()
-        myLayerNode = QgsLayerTreeLayer(vlayer)
-        root.insertChildNode(0, myLayerNode)
-        myLayerNode.setCustomProperty("showFeatureCount", False)
-        QApplication.processEvents()
-        iface.mapCanvas().refresh()
 
 
         self.progress_changed(20)
-        if not self.dlg.tabWidget.currentIndex() == 0 or self.dlg.Cmb_Metode.currentText() == "PARCELES":
+        if self.dlg.tabWidget.currentIndex() == 2 or self.dlg.Cmb_Metode.currentText() == "PARCELES":
             vlayer_resultat = vlayer
         else:
             '''Agregación en función del método de trabajo'''
@@ -960,20 +994,18 @@ class Indicadors_Habitatge:
             entitatResum = self.comprobarValidez(entitatResum)
             QApplication.processEvents()
             QgsProject.instance().addMapLayer(entitatResum, False)
-            root = QgsProject.instance().layerTreeRoot()
-            myLayerNode = QgsLayerTreeLayer(entitatResum)
-            root.insertChildNode(0, myLayerNode)
-            myLayerNode.setCustomProperty("showFeatureCount", False)
-            QApplication.processEvents()
-            iface.mapCanvas().refresh()
 
-            print("Before Agregacion")
+
+            print("Starting aggregate at:")
             print(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
-            vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum")
-            print("After Agregacion")
+            vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum", indicador, "first_value")
+            print("Aggregate ended at:")
             print(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
             QApplication.processEvents()
             QgsProject.instance().removeMapLayers([entitatResum.id()])
+
+            if indicador == "FinquesAnyConstruccioParcel·les":
+                vlayer_resultat = self.MediaPonderada(vlayer_resultat)
 
         '''Transformación del vlayer_resultat a Shape para poder editarlo'''
         if vlayer_resultat.isValid():
@@ -1059,6 +1091,14 @@ class Indicadors_Habitatge:
 
             vlayer_resultat.commitChanges()
 
+        if indicador == "FinquesAnyConstruccioParcel·les":
+            vlayer_resultat.startEditing()
+            vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "SCxAC"))
+            features = vlayer_resultat.getFeatures()
+            for feature in features:
+                if (feature.attribute("SupCons") == None):
+                    vlayer_resultat.deleteFeature(feature.id())
+            vlayer_resultat.commitChanges()
 
         if self.dlg.tabWidget.currentIndex() == 2:
             vlayer_resultat.startEditing()
@@ -1101,10 +1141,13 @@ class Indicadors_Habitatge:
     def progress_changed(self, progress):
         self.dlg.progressBar.setValue(progress)
 
-    def Agregacio(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate):
+    def Agregacio(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate,indicador, aggregate):
         f = QgsProcessingFeedback()
         f.progressChanged.connect(self.progress_changed)
-
+        if (Qgis.QGIS_VERSION_INT < 30600):
+            sortida='memory:'
+        else:
+            sortida='TEMPORARY_OUTPUT'
         alg = {
             'FIELD_LENGTH': 80,
             'FIELD_NAME': 'UUID',
@@ -1113,12 +1156,12 @@ class Indicadors_Habitatge:
             'FORMULA': 'uuid()',
             'INPUT': Entitat_Resum,
             'NEW_FIELD': True,
-            'OUTPUT': 'memory:'
+            'OUTPUT': sortida
         }
         ILLES_UNIQUE = processing.run('qgis:fieldcalculator', alg)  # , feedback=f)
 
         operador = operacio_aggregate
-        if not (self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge'):
+        if indicador == 'DensitatHabitantsHabitatge':
             alg_params = {
                 # Entitat Resum
                 'INPUT': ILLES_UNIQUE['OUTPUT'],
@@ -1131,30 +1174,7 @@ class Indicadors_Habitatge:
                                 'precision': 0,
                                 'type': 10
                                 },
-                               {'aggregate': 'first_value',
-                                'delimiter': ';',
-                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:=to_real("' + camp + '"), filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
-                                'length': -1,
-                                'name': camp,
-                                'precision': -1,
-                                'type': tipus
-                                }],
-                'OUTPUT': 'memory:'
-            }
-        else:
-            alg_params = {
-                # Entitat Resum
-                'INPUT': ILLES_UNIQUE['OUTPUT'],
-                'GROUP_BY': 'UUID',
-                'AGGREGATES': [{'aggregate': 'first_value',
-                                'delimiter': ';',
-                                'input': 'UUID',
-                                'length': 80,
-                                'name': 'UUID',
-                                'precision': 0,
-                                'type': 10
-                                },
-                               {'aggregate': 'first_value',
+                               {'aggregate': aggregate,
                                 'delimiter': ';',
                                 'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:=to_real("' + camp + '"), filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
                                 'length': -1,
@@ -1169,24 +1189,65 @@ class Indicadors_Habitatge:
                                 'name': 'Habitants',
                                 'precision': 0,
                                 'type': 2}],
-                'OUTPUT': 'memory:'
+                'OUTPUT': sortida
+            }
+        elif indicador=="FinquesAnyConstruccioParcel·les":
+            alg_params = {
+                # Entitat Resum
+                'INPUT': ILLES_UNIQUE['OUTPUT'],
+                'GROUP_BY': 'UUID',
+                'AGGREGATES': [{'aggregate': 'first_value',
+                                'delimiter': ';',
+                                'input': 'UUID',
+                                'length': 80,
+                                'name': 'UUID',
+                                'precision': 0,
+                                'type': 10
+                                },
+                               {'aggregate': aggregate,
+                                'delimiter': ';',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:=to_real("' + camp + '"), filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'length': -1,
+                                'name': camp,
+                                'precision': -1,
+                                'type': tipus
+                                },
+                                {'aggregate': 'first_value',
+                                 'delimiter': ',',
+                                 'input': 'aggregate( \'' + Entitat_Detall + '\', \'sum\',\"SCxAC\", intersects( $geometry , geometry( @parent)))',
+                                 'length': 0,
+                                 'name': 'SCxAC',
+                                 'precision': 0,
+                                 'type': 2}],
+                'OUTPUT': sortida
+            }
+        else:
+            alg_params = {
+                # Entitat Resum
+                'INPUT': ILLES_UNIQUE['OUTPUT'],
+                'GROUP_BY': 'UUID',
+                'AGGREGATES': [{'aggregate': 'first_value',
+                                'delimiter': ';',
+                                'input': 'UUID',
+                                'length': 80,
+                                'name': 'UUID',
+                                'precision': 0,
+                                'type': 10
+                                },
+                               {'aggregate': aggregate,
+                                'delimiter': ';',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:=to_real("' + camp + '"), filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'length': -1,
+                                'name': camp,
+                                'precision': -1,
+                                'type': tipus
+                                }],
+                'OUTPUT': sortida
             }
 
         pep = processing.run('qgis:aggregate', alg_params, feedback=f)
 
-        if not (self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge'):
-            alg = {
-                'INPUT': ILLES_UNIQUE['OUTPUT'],
-                'FIELD': 'UUID',
-                'INPUT_2': pep['OUTPUT'],
-                'FIELD_2': 'UUID',
-                'FIELDS_TO_COPY': [camp],
-                'METHOD': 1,
-                'DISCARD_NONMATCHING': False,
-                'PREFIX': '',
-                'OUTPUT': 'memory:'
-            }
-        else:
+        if indicador == 'DensitatHabitantsHabitatge':
             alg = {
                 'INPUT': ILLES_UNIQUE['OUTPUT'],
                 'FIELD': 'UUID',
@@ -1196,14 +1257,38 @@ class Indicadors_Habitatge:
                 'METHOD': 1,
                 'DISCARD_NONMATCHING': False,
                 'PREFIX': '',
-                'OUTPUT': 'memory:'
+                'OUTPUT': sortida
+            }
+        elif indicador == 'FinquesAnyConstruccioParcel·les':
+            alg = {
+                'INPUT': ILLES_UNIQUE['OUTPUT'],
+                'FIELD': 'UUID',
+                'INPUT_2': pep['OUTPUT'],
+                'FIELD_2': 'UUID',
+                'FIELDS_TO_COPY': [camp, "SCxAC"],
+                'METHOD': 1,
+                'DISCARD_NONMATCHING': False,
+                'PREFIX': '',
+                'OUTPUT': sortida
+            }
+        else:
+            alg = {
+                'INPUT': ILLES_UNIQUE['OUTPUT'],
+                'FIELD': 'UUID',
+                'INPUT_2': pep['OUTPUT'],
+                'FIELD_2': 'UUID',
+                'FIELDS_TO_COPY': [camp],
+                'METHOD': 1,
+                'DISCARD_NONMATCHING': False,
+                'PREFIX': '',
+                'OUTPUT': sortida
             }
         pep2 = processing.run('native:joinattributestable', alg)  # , feedback=f)
 
         alg = {
             'INPUT': pep2['OUTPUT'],
             'COLUMN': 'UUID',
-            'OUTPUT': 'memory:'
+            'OUTPUT': sortida
         }
 
         pep3 = processing.run('qgis:deletecolumn', alg)  # , feedback=f)

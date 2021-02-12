@@ -463,9 +463,9 @@
    <property name="geometry">
     <rect>
      <x>300</x>
-     <y>340</y>
+     <y>320</y>
      <width>261</width>
-     <height>111</height>
+     <height>131</height>
     </rect>
    </property>
    <property name="title">
@@ -537,9 +537,9 @@
    <property name="geometry">
     <rect>
      <x>20</x>
-     <y>200</y>
+     <y>220</y>
      <width>271</width>
-     <height>251</height>
+     <height>231</height>
     </rect>
    </property>
    <property name="title">
@@ -805,11 +805,11 @@
      <x>20</x>
      <y>50</y>
      <width>541</width>
-     <height>151</height>
+     <height>101</height>
     </rect>
    </property>
    <property name="currentIndex">
-    <number>0</number>
+    <number>1</number>
    </property>
    <widget class="QWidget" name="tab">
     <attribute name="title">
@@ -819,7 +819,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>100</y>
+       <y>40</y>
        <width>91</width>
        <height>17</height>
       </rect>
@@ -832,7 +832,7 @@
      <property name="geometry">
       <rect>
        <x>80</x>
-       <y>70</y>
+       <y>10</y>
        <width>451</width>
        <height>22</height>
       </rect>
@@ -842,7 +842,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>70</y>
+       <y>10</y>
        <width>71</width>
        <height>21</height>
       </rect>
@@ -851,81 +851,11 @@
       <string>Indicadors</string>
      </property>
     </widget>
-    <widget class="QGroupBox" name="Metodes">
-     <property name="geometry">
-      <rect>
-       <x>10</x>
-       <y>10</y>
-       <width>231</width>
-       <height>50</height>
-      </rect>
-     </property>
-     <property name="title">
-      <string>Mètode de treball</string>
-     </property>
-     <widget class="QComboBox" name="Cmb_Metode">
-      <property name="geometry">
-       <rect>
-        <x>10</x>
-        <y>20</y>
-        <width>201</width>
-        <height>22</height>
-       </rect>
-      </property>
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="layoutDirection">
-       <enum>Qt::LeftToRight</enum>
-      </property>
-      <property name="maxVisibleItems">
-       <number>20</number>
-      </property>
-      <item>
-       <property name="text">
-        <string>Selecciona Mètode</string>
-       </property>
-      </item>
-      <item>
-       <property name="text">
-        <string>ILLES</string>
-       </property>
-      </item>
-      <item>
-       <property name="text">
-        <string>PARCELES</string>
-       </property>
-      </item>
-      <item>
-       <property name="text">
-        <string>SECCIONS</string>
-       </property>
-      </item>
-      <item>
-       <property name="text">
-        <string>BARRIS</string>
-       </property>
-      </item>
-      <item>
-       <property name="text">
-        <string>DISTRICTES POSTALS</string>
-       </property>
-      </item>
-      <item>
-       <property name="text">
-        <string>DISTRICTES INE</string>
-       </property>
-      </item>
-     </widget>
-    </widget>
     <widget class="QCheckBox" name="checkbox_media">
      <property name="geometry">
       <rect>
        <x>100</x>
-       <y>100</y>
+       <y>40</y>
        <width>281</width>
        <height>17</height>
       </rect>
@@ -943,7 +873,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>50</y>
+       <y>10</y>
        <width>71</width>
        <height>21</height>
       </rect>
@@ -956,7 +886,7 @@
      <property name="geometry">
       <rect>
        <x>80</x>
-       <y>50</y>
+       <y>10</y>
        <width>451</width>
        <height>22</height>
       </rect>
@@ -966,7 +896,7 @@
      <property name="geometry">
       <rect>
        <x>20</x>
-       <y>90</y>
+       <y>40</y>
        <width>91</width>
        <height>16</height>
       </rect>
@@ -979,7 +909,7 @@
      <property name="geometry">
       <rect>
        <x>140</x>
-       <y>90</y>
+       <y>40</y>
        <width>41</width>
        <height>16</height>
       </rect>
@@ -992,7 +922,7 @@
      <property name="geometry">
       <rect>
        <x>180</x>
-       <y>90</y>
+       <y>40</y>
        <width>62</width>
        <height>22</height>
       </rect>
@@ -1017,7 +947,7 @@
      <property name="geometry">
       <rect>
        <x>70</x>
-       <y>90</y>
+       <y>40</y>
        <width>62</width>
        <height>22</height>
       </rect>
@@ -1047,7 +977,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>50</y>
+       <y>10</y>
        <width>71</width>
        <height>21</height>
       </rect>
@@ -1060,7 +990,7 @@
      <property name="geometry">
       <rect>
        <x>80</x>
-       <y>50</y>
+       <y>10</y>
        <width>451</width>
        <height>22</height>
       </rect>
@@ -1120,9 +1050,9 @@
    <property name="geometry">
     <rect>
      <x>300</x>
-     <y>200</y>
+     <y>160</y>
      <width>261</width>
-     <height>131</height>
+     <height>151</height>
     </rect>
    </property>
    <property name="title">
@@ -1263,6 +1193,76 @@
    <property name="value">
     <number>24</number>
    </property>
+  </widget>
+  <widget class="QGroupBox" name="Metodes">
+   <property name="geometry">
+    <rect>
+     <x>20</x>
+     <y>160</y>
+     <width>271</width>
+     <height>50</height>
+    </rect>
+   </property>
+   <property name="title">
+    <string>Mètode de treball</string>
+   </property>
+   <widget class="QComboBox" name="Cmb_Metode">
+    <property name="geometry">
+     <rect>
+      <x>10</x>
+      <y>20</y>
+      <width>251</width>
+      <height>22</height>
+     </rect>
+    </property>
+    <property name="sizePolicy">
+     <sizepolicy hsizetype="Preferred" vsizetype="Expanding">
+      <horstretch>0</horstretch>
+      <verstretch>0</verstretch>
+     </sizepolicy>
+    </property>
+    <property name="layoutDirection">
+     <enum>Qt::LeftToRight</enum>
+    </property>
+    <property name="maxVisibleItems">
+     <number>20</number>
+    </property>
+    <item>
+     <property name="text">
+      <string>Selecciona Mètode</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>BARRIS</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>DISTRICTES INE</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>DISTRICTES POSTALS</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>ILLES</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>PARCELES</string>
+     </property>
+    </item>
+    <item>
+     <property name="text">
+      <string>SECCIONS</string>
+     </property>
+    </item>
+   </widget>
   </widget>
  </widget>
  <resources/>
