@@ -913,16 +913,16 @@ class Indicadors_Habitatge:
         if self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge' and self.dlg.tabWidget.currentIndex() == 0:
             path = QFileDialog.getExistingDirectory(self.dlg,
                                                     "Busca la carpeta que conté els arxius provinents del mòdul TAULA RESUM",
-                                                    Path_Inicial + "\\",
+                                                    Path_Inicial + "/",
                                                     QFileDialog.ShowDirsOnly)
             trobat = True
             a = time.time()
             while trobat:
                 if (path != ''):
-                    if (os.path.exists(path + "\\tr_parceles.csv")):
+                    if (os.path.exists(path + "/tr_parceles.csv")):
                         trobat = False
 
-                        arxiu = open(path + "\\tr_parceles.csv", 'r')
+                        arxiu = open(path + "/tr_parceles.csv", 'r')
                         dummy = arxiu.readline()
                         lines = arxiu.readlines()
                         try:
