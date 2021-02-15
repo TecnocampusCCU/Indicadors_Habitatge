@@ -93,7 +93,7 @@ Fitxer = ""
 cur = None
 conn = None
 Path_Inicial = expanduser("~")
-
+TEMPORARY_PATH=""
 
 class Indicadors_Habitatge:
     """QGIS Plugin Implementation."""
@@ -415,6 +415,7 @@ class Indicadors_Habitatge:
         global Versio_modul
         global itemSel
         global lbl_Cost
+        global TEMPORARY_PATH
         aux = False
         itemSel = None
         self.barraEstat_noConnectat()
@@ -453,6 +454,10 @@ class Indicadors_Habitatge:
         llista = ['MapaAlçadesParcel·la']
         self.ompleCombos(self.dlg.comboIndicador_3, llista, "Selecciona un indicador")
         self.SetTooltipIndicadors()
+        if (os.name=='nt'):
+            TEMPORARY_PATH=os.environ['TMP']
+        else:
+            TEMPORARY_PATH=os.environ['TMPDIR']
 
     def SetTooltipIndicadors(self):
         self.dlg.comboIndicador.setItemData(1,"Sup. construïda amb ús d'habitatge/nombre d'habitants",QtCore.Qt.ToolTipRole)
@@ -663,6 +668,7 @@ class Indicadors_Habitatge:
         global port1
         global usuari1
         global micolorTag
+        global TEMPORARY_PATH
         uri = QgsDataSourceUri()
         try:
             QApplication.processEvents()
@@ -676,15 +682,15 @@ class Indicadors_Habitatge:
                     save_options.fileEncoding = "UTF-8"
                     transform_context = QgsProject.instance().transformContext()
                     error = QgsVectorFileWriter.writeAsVectorFormatV2(vlayer,
-                                                                      os.environ['TMP'] + "/Area_" + Area + ".shp",
+                                                                      TEMPORARY_PATH + "/Area_" + Area + ".shp",
                                                                       transform_context, save_options)
                 else:
                     error = QgsVectorFileWriter.writeAsVectorFormat(vlayer,
-                                                                    os.environ['TMP'] + "/Area_" + Area + ".shp",
+                                                                    TEMPORARY_PATH + "/Area_" + Area + ".shp",
                                                                     "utf-8", vlayer.crs(), "ESRI Shapefile")
                 vlayer = None
                 """Es carrega el Shape a l'entorn del QGIS"""
-                vlayer = QgsVectorLayer(os.environ['TMP'] + "/Area_" + Area + ".shp", capa, "ogr")
+                vlayer = QgsVectorLayer(TEMPORARY_PATH + "/Area_" + Area + ".shp", capa, "ogr")
                 symbols = vlayer.renderer().symbols(QgsRenderContext())
                 symbol = symbols[0]
                 if self.dlg.RB_color.isChecked():
@@ -851,6 +857,7 @@ class Indicadors_Habitatge:
 
         global lbl_Cost
         global Fitxer
+        global TEMPORARY_PATH
 
         QApplication.processEvents()
         Fitxer = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
@@ -1019,15 +1026,15 @@ class Indicadors_Habitatge:
                 save_options.fileEncoding = "UTF-8"
                 transform_context = QgsProject.instance().transformContext()
                 error = QgsVectorFileWriter.writeAsVectorFormatV2(vlayer_resultat,
-                                                                  os.environ['TMP'] + "/Area_" + Area + ".shp",
+                                                                  TEMPORARY_PATH + "/Area_" + Area + ".shp",
                                                                   transform_context, save_options)
             else:
                 error = QgsVectorFileWriter.writeAsVectorFormat(vlayer_resultat,
-                                                                os.environ['TMP'] + "/Area_" + Area + ".shp",
+                                                                TEMPORARY_PATH + "/Area_" + Area + ".shp",
                                                                 "utf-8", vlayer_resultat.crs(), "ESRI Shapefile")
             vlayer_resultat = None
             """Es carrega el Shape a l'entorn del QGIS"""
-            vlayer_resultat = QgsVectorLayer(os.environ['TMP'] + "/Area_" + Area + ".shp", capa, "ogr")
+            vlayer_resultat = QgsVectorLayer(TEMPORARY_PATH + "/Area_" + Area + ".shp", capa, "ogr")
 
         if self.dlg.tabWidget.currentIndex() == 0:
             self.progress_changed(95)
