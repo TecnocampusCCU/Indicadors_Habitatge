@@ -6,7 +6,7 @@
 name=Indicadors_Habitatge
 qgisMinimumVersion=3.4
 description=Indicadors_Habitatge
-version=Q3.210212
+version=Q3.210215
 author=CCU
 email=jlopez@tecnocampus.cat
 

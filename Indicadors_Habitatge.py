@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210212"
+Versio_modul = "V_Q3.210215"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
