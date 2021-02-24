@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210212"
+Versio_modul = "V_Q3.210224"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -430,6 +430,7 @@ class Indicadors_Habitatge:
         self.dlg.comboIndicador_2.clear;
         self.dlg.comboIndicador_3.clear;
         self.dlg.CB_etiquetes.setChecked(False)
+        self.dlg.mitjanaRadioButton.setChecked(True)
         self.dlg.mida.setEnabled(False)
         self.dlg.colorTag.setEnabled(False)
         self.dlg.decimals.setEnabled(False)
@@ -448,7 +449,7 @@ class Indicadors_Habitatge:
         llista = ['DensitatHabitantsHabitatge', 'DensitatHabitatgeÀrea',
                   'DensitatEdificis', 'DensitatPlanta0Area']
         self.ompleCombos(self.dlg.comboIndicador, llista, "Selecciona un indicador")
-        llista = ['FinquesAnyConstruccioParcel·les']
+        llista = ['FinquesAnyConstruccio']
         self.ompleCombos(self.dlg.comboIndicador_2, llista, "Selecciona un indicador")
         llista = ['MapaAlçadesParcel·la']
         self.ompleCombos(self.dlg.comboIndicador_3, llista, "Selecciona un indicador")
@@ -459,7 +460,7 @@ class Indicadors_Habitatge:
         self.dlg.comboIndicador.setItemData(2,"Sup. construïda amb ús d'habitatge/Sup. geomètrica (solar)",QtCore.Qt.ToolTipRole)
         self.dlg.comboIndicador.setItemData(3,"Sup. construïda per a qualsevol ús/Sup. geometrica (solar)",QtCore.Qt.ToolTipRole)
         self.dlg.comboIndicador.setItemData(4,"Sup. construïda en planta baixa/Sup. geomètrica (solar)",QtCore.Qt.ToolTipRole)
-        self.dlg.comboIndicador_2.setItemData(1,"Any construcció parcel·la",QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador_2.setItemData(1,"Any construcció",QtCore.Qt.ToolTipRole)
         self.dlg.comboIndicador_3.setItemData(1,"Nombre de plantes edifici mes alt de la parcel·la",QtCore.Qt.ToolTipRole)
 
 
@@ -586,7 +587,7 @@ class Indicadors_Habitatge:
 
     def getIndicador2(self):
         currentComboText = self.dlg.comboIndicador_2.currentText()
-        if currentComboText == 'FinquesAnyConstruccioParcel·les':
+        if currentComboText == 'FinquesAnyConstruccio':
             return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM",
             SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons", SUM(fus."Superficie_Nocons"::INTEGER) AS "SupNoCons",
             fac."Any_constr", (SUM(fus."Superficie_Cons"::INTEGER) * fac."Any_constr"::INTEGER) AS "SCxAC"
@@ -650,7 +651,7 @@ class Indicadors_Habitatge:
                 return "metres quadrats/metre quadrat"
             else:
                 return "metre quadrat/metres quadrats"
-        elif currentComboText == 'FinquesAnyConstruccioParcel·les':
+        elif currentComboText == 'FinquesAnyConstruccio':
             return ""
         elif currentComboText == 'MapaAlçadesParcel·la':
             return ""
@@ -995,17 +996,32 @@ class Indicadors_Habitatge:
             QApplication.processEvents()
             QgsProject.instance().addMapLayer(entitatResum, False)
 
+            if indicador == "FinquesAnyConstruccio":
+                if self.dlg.mitjanaRadioButton.isChecked():
+                    vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum",
+                                                     indicador, "first_value")
+                    vlayer_resultat = self.MediaPonderada(vlayer_resultat)
+                else:
+                    vlayer_resultat = self.Agregacio(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate",
+                                                     "modaPonderada", "first_value")
+                    expresion = 'maximum("SupCons",group_by:="id_agrupat")'
+                    vlayer_resultat = self.FieldCalculator(vlayer_resultat, "maxSupCons",expresion)
 
-            print("Starting aggregate at:")
-            print(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
-            vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum", indicador, "first_value")
-            print("Aggregate ended at:")
-            print(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
+                    expresion = 'maximum("Any_constr",group_by:= "id_agrupat",filter:= "SupCons"="maxSupCons")'
+                    vlayer_calculat = self.FieldCalculator(vlayer_resultat, "Any", expresion)
+
+                    QgsProject.instance().addMapLayer(vlayer_calculat, False)
+
+                    vlayer_resultat = self.Agregacio(entitatResum, vlayer_calculat.id(), "intersects", "SupCons", 6, "sum",
+                                                     "modaPonderada2", "first_value")
+                    QgsProject.instance().removeMapLayers([vlayer_calculat.id()])
+
+            else:
+                vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum", indicador, "first_value")
+
             QApplication.processEvents()
             QgsProject.instance().removeMapLayers([entitatResum.id()])
 
-            if indicador == "FinquesAnyConstruccioParcel·les":
-                vlayer_resultat = self.MediaPonderada(vlayer_resultat)
 
         '''Transformación del vlayer_resultat a Shape para poder editarlo'''
         if vlayer_resultat.isValid():
@@ -1091,7 +1107,7 @@ class Indicadors_Habitatge:
 
             vlayer_resultat.commitChanges()
 
-        if indicador == "FinquesAnyConstruccioParcel·les":
+        if indicador == "FinquesAnyConstruccio" and self.dlg.mitjanaRadioButton.isChecked():
             vlayer_resultat.startEditing()
             vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "SCxAC"))
             features = vlayer_resultat.getFeatures()
@@ -1137,9 +1153,30 @@ class Indicadors_Habitatge:
         self.barraEstat_connectat()
         self.dlg.setEnabled(True)
 
+
     # Processing feedback
     def progress_changed(self, progress):
         self.dlg.progressBar.setValue(progress)
+
+
+    def FieldCalculator(self, vlayer_resultat, field_name,expresion):
+        if (Qgis.QGIS_VERSION_INT < 30600):
+            sortida = 'memory:'
+        else:
+            sortida = 'TEMPORARY_OUTPUT'
+        alg = {
+            'INPUT': vlayer_resultat,
+            'FIELD_NAME': field_name,
+            'FIELD_TYPE': 1,
+            'FIELD_LENGTH': 10,
+            'FIELD_PRECISION': 3,
+            'NEW_FIELD': True,
+            'FORMULA': expresion,
+            'OUTPUT': sortida
+        }
+        result = processing.run('qgis:fieldcalculator', alg)
+        return result['OUTPUT']
+
 
     def Agregacio(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate,indicador, aggregate):
         f = QgsProcessingFeedback()
@@ -1191,7 +1228,7 @@ class Indicadors_Habitatge:
                                 'type': 2}],
                 'OUTPUT': sortida
             }
-        elif indicador=="FinquesAnyConstruccioParcel·les":
+        elif indicador=="FinquesAnyConstruccio":
             alg_params = {
                 # Entitat Resum
                 'INPUT': ILLES_UNIQUE['OUTPUT'],
@@ -1217,6 +1254,61 @@ class Indicadors_Habitatge:
                                  'input': 'aggregate( \'' + Entitat_Detall + '\', \'sum\',\"SCxAC\", intersects( $geometry , geometry( @parent)))',
                                  'length': 0,
                                  'name': 'SCxAC',
+                                 'precision': 0,
+                                 'type': 2}],
+                'OUTPUT': sortida
+            }
+        elif indicador == "modaPonderada":
+            alg_params = {
+                # Entitat Resum
+                'INPUT': ILLES_UNIQUE['OUTPUT'],
+                'GROUP_BY': 'UUID',
+                'AGGREGATES': [{'aggregate': 'first_value',
+                                'delimiter': ';',
+                                'input': 'UUID',
+                                'length': 80,
+                                'name': 'UUID',
+                                'precision': 0,
+                                'type': 10
+                                },
+                               {'aggregate': aggregate,
+                                'delimiter': ';',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:=to_string(\"' + camp + '\"), filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'length': 0,
+                                'name': camp + "_agrupat",
+                                'precision': 0,
+                                'type': tipus
+                                }],
+                'OUTPUT': sortida
+            }
+            camp = camp + "_agrupat"
+        elif indicador=="modaPonderada2":
+            alg_params = {
+                # Entitat Resum
+                'INPUT': ILLES_UNIQUE['OUTPUT'],
+                'GROUP_BY': 'UUID',
+                'AGGREGATES': [{'aggregate': 'first_value',
+                                'delimiter': ';',
+                                'input': 'UUID',
+                                'length': 80,
+                                'name': 'UUID',
+                                'precision': 0,
+                                'type': 10
+                                },
+                               {'aggregate': aggregate,
+                                'delimiter': ';',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:="' + camp + '", filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'length': -1,
+                                'name': camp,
+                                'precision': -1,
+                                'type': tipus
+                                },
+                                {'aggregate': 'first_value',
+                                 'delimiter': ',',
+                                 #'input': 'aggregate( \'' + Entitat_Detall + '\', \'max\',\"Any\", intersects( $geometry , geometry( @parent)))',
+                                 'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'max\',expression:=\"Any\", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                 'length': 0,
+                                 'name': 'Any_constr',
                                  'precision': 0,
                                  'type': 2}],
                 'OUTPUT': sortida
@@ -1259,13 +1351,25 @@ class Indicadors_Habitatge:
                 'PREFIX': '',
                 'OUTPUT': sortida
             }
-        elif indicador == 'FinquesAnyConstruccioParcel·les':
+        elif indicador == 'FinquesAnyConstruccio':
             alg = {
                 'INPUT': ILLES_UNIQUE['OUTPUT'],
                 'FIELD': 'UUID',
                 'INPUT_2': pep['OUTPUT'],
                 'FIELD_2': 'UUID',
                 'FIELDS_TO_COPY': [camp, "SCxAC"],
+                'METHOD': 1,
+                'DISCARD_NONMATCHING': False,
+                'PREFIX': '',
+                'OUTPUT': sortida
+            }
+        elif indicador == 'modaPonderada2':
+            alg = {
+                'INPUT': ILLES_UNIQUE['OUTPUT'],
+                'FIELD': 'UUID',
+                'INPUT_2': pep['OUTPUT'],
+                'FIELD_2': 'UUID',
+                'FIELDS_TO_COPY': [camp, "Any_constr"],
                 'METHOD': 1,
                 'DISCARD_NONMATCHING': False,
                 'PREFIX': '',
@@ -1345,3 +1449,5 @@ class Indicadors_Habitatge:
             # Do something useful here - delete the line containing pass and
             # substitute with your code.
             pass
+
+

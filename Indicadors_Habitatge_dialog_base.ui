@@ -968,6 +968,32 @@
       <double>1950.000000000000000</double>
      </property>
     </widget>
+    <widget class="QRadioButton" name="mitjanaRadioButton">
+     <property name="geometry">
+      <rect>
+       <x>270</x>
+       <y>43</y>
+       <width>121</width>
+       <height>17</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Mitjana ponderada</string>
+     </property>
+    </widget>
+    <widget class="QRadioButton" name="modaRadioButton">
+     <property name="geometry">
+      <rect>
+       <x>400</x>
+       <y>43</y>
+       <width>121</width>
+       <height>17</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Moda ponderada</string>
+     </property>
+    </widget>
    </widget>
    <widget class="QWidget" name="tab_3">
     <attribute name="title">
