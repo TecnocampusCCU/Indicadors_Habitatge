@@ -1011,6 +1011,8 @@ class Indicadors_Habitatge:
                 else:
                     vlayer_resultat = self.Agregacio(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate",
                                                      "modaPonderada", "first_value")
+                    self.progress_changed(90)
+
                     expresion = 'maximum("SupCons",group_by:="id_agrupat")'
                     vlayer_resultat = self.FieldCalculator(vlayer_resultat, "maxSupCons",expresion)
 
@@ -1114,12 +1116,13 @@ class Indicadors_Habitatge:
 
             vlayer_resultat.commitChanges()
 
-        if indicador == "FinquesAnyConstruccio" and self.dlg.mitjanaRadioButton.isChecked():
+        if indicador == "FinquesAnyConstruccio":
             vlayer_resultat.startEditing()
-            vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "SCxAC"))
+            if self.dlg.mitjanaRadioButton.isChecked():
+                vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "SCxAC"))
             features = vlayer_resultat.getFeatures()
             for feature in features:
-                if (feature.attribute("SupCons") == None):
+                if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
                     vlayer_resultat.deleteFeature(feature.id())
             vlayer_resultat.commitChanges()
 
