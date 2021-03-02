@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210224"
+Versio_modul = "V_Q3.210302"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -698,7 +698,10 @@ class Indicadors_Habitatge:
                     symbol.setColor(self.dlg.color.palette().color(1))
                     vlayer.setOpacity(self.dlg.Transparencia.value() / 100)
                 else:
-                    fieldname = "Indicador"
+                    if self.dlg.tabWidget.currentIndex() != 1:
+                        fieldname = "Indicador"
+                    else:
+                        fieldname = "Any_constr"
                     template = "%1 - %2 " + self.getUnitats()
 
                     numberOfClasses = int(float(self.dlg.LE_rang.value()))
@@ -757,7 +760,11 @@ class Indicadors_Habitatge:
                     layer_settings.setFormat(text_format)
 
                     layer_settings.isExpression = True
-                    layer_settings.fieldName = "to_string(round( \"Indicador\"," + str(self.dlg.decimals.value()) + "))"
+                    if self.dlg.tabWidget.currentIndex() != 1:
+                        layer_settings.fieldName = "to_string(round( \"Indicador\"," + str(self.dlg.decimals.value()) + "))"
+                    else:
+                        layer_settings.fieldName = "to_string(round( \"Any_constr\"," + str(
+                            self.dlg.decimals.value()) + "))"
                     if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
                         layer_settings.fieldName += "+'%'"
                     QApplication.processEvents()
@@ -805,7 +812,6 @@ class Indicadors_Habitatge:
 
     def comprobarValidez(self, vlayer):
         parameters = {'ERROR_OUTPUT': 'memory:',
-                      # 'IGNORE_RING_SELF_INTERSECTION' : False,
                       'INPUT_LAYER': vlayer,
                       'INVALID_OUTPUT': 'memory:',
                       'METHOD': 2,
@@ -814,6 +820,57 @@ class Indicadors_Habitatge:
         result = processing.run('qgis:checkvalidity', parameters)
 
         return result['VALID_OUTPUT']
+
+    def procesoModaPonderada(self, vlayer):
+        f = QgsProcessingFeedback()
+        if (Qgis.QGIS_VERSION_INT < 30600):
+            sortida='memory:'
+        else:
+            sortida='TEMPORARY_OUTPUT'
+
+
+        parameters = {'CATEGORIES_FIELD_NAME': ['Any_constr','id_agrupat'],
+                      'INPUT': vlayer,
+                      'OUTPUT': sortida,
+                      'VALUES_FIELD_NAME': 'SupCons'}
+        result = processing.run('qgis:statisticsbycategories', parameters)
+
+        parameters = {
+            'INPUT': result['OUTPUT'],
+            'GROUP_BY': 'id_agrupat',
+            'AGGREGATES': [{'aggregate': 'concatenate',
+                            'delimiter': '',
+                            'input': 'if(sum=maximum(sum,group_by:=id_agrupat),\"Any_constr\",\'\')',
+                            'length': -1,
+                            'name': 'Any',
+                            'precision': -1,
+                            'type': 10},
+                           {'aggregate': 'first_value',
+                            'delimiter': ',',
+                            'input': '\"id_agrupat\"',
+                            'length': 0,
+                            'name': 'id_agrupat',
+                            'precision': 0,
+                            'type': 4}],
+            'OUTPUT': sortida
+        }
+        result = processing.run('qgis:aggregate', parameters, feedback=f)
+
+        parameters = {
+            'INPUT': vlayer,
+            'INPUT_2': result['OUTPUT'],
+            'DISCARD_NONMATCHING': False,
+            'FIELD': 'id_agrupat',
+            'FIELDS_TO_COPY': ['Any'],
+            'FIELD_2': 'id_agrupat',
+            'METHOD':1,
+            'PREFIX':'',
+            'OUTPUT': sortida
+        }
+        result = processing.run('native:joinattributestable', parameters, feedback=f)
+
+        return result['OUTPUT']
+
 
     def MediaPonderada(self, vlayer):
         vlayer.startEditing()
@@ -1011,26 +1068,28 @@ class Indicadors_Habitatge:
                 else:
                     vlayer_resultat = self.Agregacio(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate",
                                                      "modaPonderada", "first_value")
-                    self.progress_changed(90)
+                    self.progress_changed(70)
+                    QApplication.processEvents()
 
-                    expresion = 'maximum("SupCons",group_by:="id_agrupat")'
-                    vlayer_resultat = self.FieldCalculator(vlayer_resultat, "maxSupCons",expresion)
+                    vlayer_resultat.startEditing()
+                    features = vlayer_resultat.getFeatures()
+                    for feature in features:
+                        if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
+                            vlayer_resultat.deleteFeature(feature.id())
+                    vlayer_resultat.commitChanges()
 
-                    expresion = 'maximum("Any_constr",group_by:= "id_agrupat",filter:= "SupCons"="maxSupCons")'
-                    vlayer_calculat = self.FieldCalculator(vlayer_resultat, "Any", expresion)
+                    vlayer_calculat = self.procesoModaPonderada(vlayer_resultat)
 
                     QgsProject.instance().addMapLayer(vlayer_calculat, False)
 
                     vlayer_resultat = self.Agregacio(entitatResum, vlayer_calculat.id(), "intersects", "SupCons", 6, "sum",
                                                      "modaPonderada2", "first_value")
                     QgsProject.instance().removeMapLayers([vlayer_calculat.id()])
-
             else:
                 vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum", indicador, "first_value")
 
             QApplication.processEvents()
             QgsProject.instance().removeMapLayers([entitatResum.id()])
-
 
         '''Transformación del vlayer_resultat a Shape para poder editarlo'''
         if vlayer_resultat.isValid():
@@ -1108,7 +1167,6 @@ class Indicadors_Habitatge:
                         media = 0
                     else:
                         media = unitatTotal / supConsTotal
-                print(media)
                 if media != 0:
                     for feature in vlayer_resultat.getFeatures():
                         vlayer_resultat.changeAttributeValue(feature.id(), index,
@@ -1121,9 +1179,11 @@ class Indicadors_Habitatge:
             if self.dlg.mitjanaRadioButton.isChecked():
                 vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "SCxAC"))
             features = vlayer_resultat.getFeatures()
+            index = self.getIndexField(vlayer_resultat, "Any_constr")
             for feature in features:
                 if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
                     vlayer_resultat.deleteFeature(feature.id())
+                vlayer_resultat.changeAttributeValue(feature.id(), index, str(feature.attribute("Any_constr"))[:4])
             vlayer_resultat.commitChanges()
 
         if self.dlg.tabWidget.currentIndex() == 2:
@@ -1139,13 +1199,11 @@ class Indicadors_Habitatge:
         self.mostraSHPperPantalla(vlayer_resultat, capa)
         QgsProject.instance().removeMapLayers([vlayer.id()])
 
-        print(datetime.datetime.now().strftime("%Y%m%d%H%M%S%f"))
-
         QApplication.processEvents()
         iface.mapCanvas().refresh()
-        print("End")
         drop = ''
         drop += 'DROP TABLE IF EXISTS "tr_temp' + Fitxer + '";\n'
+        drop += 'DROP TABLE IF EXISTS "LayerExportat' + Fitxer + '";\n'
         try:
             cur.execute(drop)
             conn.commit()
@@ -1167,25 +1225,6 @@ class Indicadors_Habitatge:
     # Processing feedback
     def progress_changed(self, progress):
         self.dlg.progressBar.setValue(progress)
-
-
-    def FieldCalculator(self, vlayer_resultat, field_name,expresion):
-        if (Qgis.QGIS_VERSION_INT < 30600):
-            sortida = 'memory:'
-        else:
-            sortida = 'TEMPORARY_OUTPUT'
-        alg = {
-            'INPUT': vlayer_resultat,
-            'FIELD_NAME': field_name,
-            'FIELD_TYPE': 1,
-            'FIELD_LENGTH': 10,
-            'FIELD_PRECISION': 3,
-            'NEW_FIELD': True,
-            'FORMULA': expresion,
-            'OUTPUT': sortida
-        }
-        result = processing.run('qgis:fieldcalculator', alg)
-        return result['OUTPUT']
 
 
     def Agregacio(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate,indicador, aggregate):
@@ -1315,7 +1354,6 @@ class Indicadors_Habitatge:
                                 },
                                 {'aggregate': 'first_value',
                                  'delimiter': ',',
-                                 #'input': 'aggregate( \'' + Entitat_Detall + '\', \'max\',\"Any\", intersects( $geometry , geometry( @parent)))',
                                  'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'max\',expression:=\"Any\", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')',
                                  'length': 0,
                                  'name': 'Any_constr',
