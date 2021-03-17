@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210302"
+Versio_modul = "V_Q3.210317"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -575,11 +575,11 @@ class Indicadors_Habitatge:
             FROM "parcel"  LEFT JOIN "tr_temp''' + fitxer + '''" AS tr ON "parcel"."UTM" = tr."Parcela" LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM"
             WHERE fus."Superficie_Cons" IS NOT NULL AND tr."Habitants" IS NOT NULL'''
         elif currentComboText == 'DensitatHabitatgeÀrea':
-            return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons", fus."Superficie_Nocons" AS "SupNocons", ST_Area(geom)
+            return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons", ST_Area(geom)
             FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM"
             WHERE fus."Superficie_Cons" IS NOT NULL'''
         elif currentComboText == 'DensitatEdificis':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM",  SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons", SUM(fus."Superficie_Nocons"::INTEGER) AS "SupNoCons"
+            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM",  SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons"
             FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
             WHERE fus."Superficie_Cons" IS NOT NULL
             GROUP BY "parcel"."geom", "parcel"."UTM"'''
@@ -594,7 +594,7 @@ class Indicadors_Habitatge:
         currentComboText = self.dlg.comboIndicador_2.currentText()
         if currentComboText == 'FinquesAnyConstruccio':
             return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM",
-            SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons", SUM(fus."Superficie_Nocons"::INTEGER) AS "SupNoCons",
+            SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons",
             fac."Any_constr", (SUM(fus."Superficie_Cons"::INTEGER) * fac."Any_constr"::INTEGER) AS "SCxAC"
             FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
             LEFT JOIN (SELECT "UTM", MAX("Any_constr") AS "Any_constr"
