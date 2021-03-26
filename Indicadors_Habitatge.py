@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210325"
+Versio_modul = "V_Q3.210326"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -638,9 +638,9 @@ class Indicadors_Habitatge:
 
         if currentComboText == 'DensitatHabitantsHabitatge':
             if not self.dlg.inverse_ratio.isChecked():
-                return "m^2/hab"
+                return "hab/m^2 x 10000"
             else:
-                return "hab/m^2"
+                return "m^2/hab"
         elif currentComboText == 'DensitatHabitatgeÀrea':
             if not self.dlg.inverse_ratio.isChecked():
                 return "m^2/m^2"
@@ -1133,10 +1133,12 @@ class Indicadors_Habitatge:
                 if (feature.attribute("SupCons") == None):
                     vlayer_resultat.deleteFeature(feature.id())
                     continue
+
                 if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
                     unitat = int(feature.attribute("Habitants"))
                 else:
                     unitat = float(feature.geometry().area())
+
                 supCons = feature.attribute("SupCons")
                 if type(supCons) is QVariant:
                     supCons = supCons.Double
@@ -1144,7 +1146,12 @@ class Indicadors_Habitatge:
                     supCons = float(supCons)
                 if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatPlanta0Area' and supCons > float(feature.geometry().area()):
                     supCons = float(feature.geometry().area())
-                if not self.dlg.inverse_ratio.isChecked():
+
+                inverse = self.dlg.inverse_ratio.isChecked()
+                if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
+                    inverse = not inverse
+
+                if not inverse:
                     if unitat == 0:
                         value = 0
                     else:
@@ -1197,6 +1204,15 @@ class Indicadors_Habitatge:
                     index = self.getIndexField(vlayer_resultat, "Indicador")
                     value = int(feature.attribute("SupCons")/float(feature.geometry().area())) + 1
                     vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+            vlayer_resultat.commitChanges()
+
+        if self.getUnitats() == "hab/m^2 x 10000":
+            vlayer_resultat.startEditing()
+            features = vlayer_resultat.getFeatures()
+            index = self.getIndexField(vlayer_resultat, "Indicador")
+            for feature in features:
+                value = float(feature.attribute("Indicador")) * 10000
+                vlayer_resultat.changeAttributeValue(feature.id(), index, value)
             vlayer_resultat.commitChanges()
 
         self.mostraSHPperPantalla(vlayer_resultat, capa +" "+self.getUnitats())
