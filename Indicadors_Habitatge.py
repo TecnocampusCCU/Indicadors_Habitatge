@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210317"
+Versio_modul = "V_Q3.210325"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -638,24 +638,24 @@ class Indicadors_Habitatge:
 
         if currentComboText == 'DensitatHabitantsHabitatge':
             if not self.dlg.inverse_ratio.isChecked():
-                return "metres quadrats/habitant"
+                return "m^2/hab"
             else:
-                return "habitant/metres quadrats"
+                return "hab/m^2"
         elif currentComboText == 'DensitatHabitatgeÀrea':
             if not self.dlg.inverse_ratio.isChecked():
-                return "metres quadrats/metre quadrat"
+                return "m^2/m^2"
             else:
-                return "metre quadrat/metres quadrats"
+                return "m^2/m^2"
         elif currentComboText == 'DensitatEdificis':
             if not self.dlg.inverse_ratio.isChecked():
-                return "metres quadrats/metre quadrat"
+                return "m^2/m^2"
             else:
-                return "metre quadrat/metres quadrats"
+                return "m^2/m^2"
         elif currentComboText == 'DensitatPlanta0Area':
             if not self.dlg.inverse_ratio.isChecked():
-                return "metres quadrats/metre quadrat"
+                return "m^2/m^2"
             else:
-                return "metre quadrat/metres quadrats"
+                return "m^2/m^2"
         elif currentComboText == 'FinquesAnyConstruccio':
             return ""
         elif currentComboText == 'MapaAlçadesParcel·la':
@@ -720,7 +720,9 @@ class Indicadors_Habitatge:
 
                     format = QgsRendererRangeLabelFormat()
 
-                    precision = 0
+                    precision = 3
+                    if self.dlg.tabWidget.currentIndex() == 1:
+                        precision = 0
                     format.setFormat(template)
                     format.setPrecision(precision)
                     format.setTrimTrailingZeroes(False)
@@ -1029,6 +1031,7 @@ class Indicadors_Habitatge:
                     return
 
         self.progress_changed(10)
+        QApplication.processEvents()
         vlayer = QgsVectorLayer(uri.uri(False), capa, "postgres")
         vlayer = self.comprobarValidez(vlayer)
 
@@ -1196,7 +1199,7 @@ class Indicadors_Habitatge:
                     vlayer_resultat.changeAttributeValue(feature.id(), index, value)
             vlayer_resultat.commitChanges()
 
-        self.mostraSHPperPantalla(vlayer_resultat, capa)
+        self.mostraSHPperPantalla(vlayer_resultat, capa +" "+self.getUnitats())
         QgsProject.instance().removeMapLayers([vlayer.id()])
 
         QApplication.processEvents()
