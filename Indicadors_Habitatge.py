@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210414"
+Versio_modul = "V_Q3.210415"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -610,31 +610,35 @@ class Indicadors_Habitatge:
         currentComboText = self.dlg.comboIndicador_3.currentText()
         if currentComboText == 'MapaAlçadesParcel·la':
             return '''SELECT * FROM mapa_alcades'''
-            #return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",
-            #(CASE
-            #WHEN alt."Indicador" != -1 THEN
-            #alt."Indicador"
-            #ELSE
-            #(("SupCons"::INTEGER)/ST_Area("geom")::INTEGER)+1 END) AS "Indicador", alt."SupCons"
-            #FROM "parcel" LEFT JOIN
-            #(SELECT "UTM", MAX(
-            #CASE
-            #WHEN "Pis" ~ '^[0-9\.]+$' THEN
-            #CAST ("Pis" AS INTEGER)+1
-            #ELSE
-            #(CASE
-            #WHEN "Pis" LIKE 'OD' THEN
-            #-1
-            #ELSE
-            #1 END)
-            #END) AS "Indicador",
-            #SUM("Superficie_cons"::INTEGER) AS "SupCons"
-            #FROM "FinquesPlantes"
-            #WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
-            #GROUP BY "UTM")
-            #AS alt ON "parcel"."UTM" = alt."UTM"
-            #WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0
-            #ORDER BY 4'''
+
+
+    def getMaterializedView(self):
+        return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",
+        (CASE
+        WHEN alt."Indicador" != -1 THEN
+        alt."Indicador"
+        ELSE
+        (("SupCons"::INTEGER)/ST_Area("geom")::INTEGER)+1 END) AS "Indicador", alt."SupCons"
+        FROM "parcel" LEFT JOIN
+        (SELECT "UTM", MAX(
+        CASE
+        WHEN "Pis" ~ '^[0-9\.]+$' THEN
+        CAST ("Pis" AS INTEGER)+1
+        ELSE
+        (CASE
+        WHEN "Pis" LIKE 'OD' THEN
+        -1
+        ELSE
+        1 END)
+        END) AS "Indicador",
+        SUM("Superficie_cons"::INTEGER) AS "SupCons"
+        FROM "FinquesPlantes"
+        WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
+        GROUP BY "UTM")
+        AS alt ON "parcel"."UTM" = alt."UTM"
+        WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0
+        ORDER BY 4;'''
+
 
     def getUnitats(self):
         if self.dlg.tabWidget.currentIndex() == 0:
@@ -961,6 +965,9 @@ class Indicadors_Habitatge:
             self.barraEstat_connectat()
             return
 
+        QApplication.processEvents()
+        self.progress_changed(5)
+
         if self.dlg.tabWidget.currentIndex() == 0:
             sql = self.getIndicador(Fitxer)
             indicador = self.dlg.comboIndicador.currentText()
@@ -970,8 +977,9 @@ class Indicadors_Habitatge:
         else:
             sql = self.getIndicador3()
             indicador = self.dlg.comboIndicador_3.currentText()
-        QApplication.processEvents()
-        self.progress_changed(5)
+            cur.execute(
+                "CREATE MATERIALIZED VIEW IF NOT EXISTS mapa_alcades AS "+self.getMaterializedView())
+            conn.commit()
 
         uri.setDataSource("", "(" + sql + ")", "geom", "", "id")
         if self.dlg.tabWidget.currentIndex() == 2:
