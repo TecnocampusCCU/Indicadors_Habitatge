@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210326"
+Versio_modul = "V_Q3.210414"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -609,22 +609,32 @@ class Indicadors_Habitatge:
     def getIndicador3(self):
         currentComboText = self.dlg.comboIndicador_3.currentText()
         if currentComboText == 'MapaAlçadesParcel·la':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM", alt."Indicador", alt."Pis", alt."SupCons"
-            FROM "parcel" LEFT JOIN
-            (SELECT "UTM", MAX(
-            CASE
-            WHEN "Pis" ~ '^[0-9\.]+$' THEN
-            CAST ("Pis" AS INTEGER)
-            ELSE
-            0
-            END)+1 AS "Indicador", "Pis",
-            SUM("Superficie_cons"::INTEGER) AS "SupCons"
-            FROM "FinquesPlantes"
-            WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
-            GROUP BY "UTM", "Pis")
-            AS alt ON "parcel"."UTM" = alt."UTM" 
-            WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0 
-            ORDER BY 4'''
+            return '''SELECT * FROM mapa_alcades'''
+            #return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",
+            #(CASE
+            #WHEN alt."Indicador" != -1 THEN
+            #alt."Indicador"
+            #ELSE
+            #(("SupCons"::INTEGER)/ST_Area("geom")::INTEGER)+1 END) AS "Indicador", alt."SupCons"
+            #FROM "parcel" LEFT JOIN
+            #(SELECT "UTM", MAX(
+            #CASE
+            #WHEN "Pis" ~ '^[0-9\.]+$' THEN
+            #CAST ("Pis" AS INTEGER)+1
+            #ELSE
+            #(CASE
+            #WHEN "Pis" LIKE 'OD' THEN
+            #-1
+            #ELSE
+            #1 END)
+            #END) AS "Indicador",
+            #SUM("Superficie_cons"::INTEGER) AS "SupCons"
+            #FROM "FinquesPlantes"
+            #WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
+            #GROUP BY "UTM")
+            #AS alt ON "parcel"."UTM" = alt."UTM"
+            #WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0
+            #ORDER BY 4'''
 
     def getUnitats(self):
         if self.dlg.tabWidget.currentIndex() == 0:
@@ -1196,15 +1206,6 @@ class Indicadors_Habitatge:
                 vlayer_resultat.changeAttributeValue(feature.id(), index, str(feature.attribute("Any_constr"))[:4])
             vlayer_resultat.commitChanges()
 
-        if self.dlg.tabWidget.currentIndex() == 2:
-            vlayer_resultat.startEditing()
-            features = vlayer_resultat.getFeatures()
-            for feature in features:
-                if feature.attribute("Pis") == "OD":
-                    index = self.getIndexField(vlayer_resultat, "Indicador")
-                    value = int(feature.attribute("SupCons")/float(feature.geometry().area())) + 1
-                    vlayer_resultat.changeAttributeValue(feature.id(), index, value)
-            vlayer_resultat.commitChanges()
 
         if self.getUnitats() == "hab/m^2 x 10000":
             vlayer_resultat.startEditing()
