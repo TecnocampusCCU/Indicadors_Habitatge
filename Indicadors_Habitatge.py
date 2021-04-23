@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210415"
+Versio_modul = "V_Q3.210423"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -980,6 +980,8 @@ class Indicadors_Habitatge:
             cur.execute(
                 "CREATE MATERIALIZED VIEW IF NOT EXISTS mapa_alcades AS "+self.getMaterializedView())
             conn.commit()
+            cur.execute("REFRESH MATERIALIZED VIEW mapa_alcades")
+            conn.commit()
 
         uri.setDataSource("", "(" + sql + ")", "geom", "", "id")
         if self.dlg.tabWidget.currentIndex() == 2:
@@ -993,12 +995,11 @@ class Indicadors_Habitatge:
                                                     "Busca la carpeta que conté els arxius provinents del mòdul TAULA RESUM",
                                                     Path_Inicial + "/",
                                                     QFileDialog.ShowDirsOnly)
-            trobat = True
-            a = time.time()
-            while trobat:
+            noTrobat = True
+            while noTrobat:
                 if (path != ''):
                     if (os.path.exists(path + "/tr_parceles.csv")):
-                        trobat = False
+                        noTrobat = False
 
                         arxiu = open(path + "/tr_parceles.csv", 'r')
                         dummy = arxiu.readline()
@@ -1062,77 +1063,10 @@ class Indicadors_Habitatge:
             vlayer_resultat = vlayer
         else:
             '''Agregación en función del método de trabajo'''
-            if self.dlg.Cmb_Metode.currentText() == "ILLES":
-                uri.setDataSource("", "(SELECT * FROM \"ILLES\" WHERE \"D_S_I\" NOT LIKE '' AND \"D_S_I\" IS NOT NULL)",
-                                  "geom", "", "id")
-            elif self.dlg.Cmb_Metode.currentText() == "PARCELES":
-                uri.setDataSource("", "(SELECT * FROM \"parcel\")", "geom", "", "id")
-            elif self.dlg.Cmb_Metode.currentText() == "SECCIONS":
-                uri.setDataSource("", "(SELECT * FROM \"Seccions\")", "geom", "", "id")
-            elif self.dlg.Cmb_Metode.currentText() == "BARRIS":
-                uri.setDataSource("", "(SELECT * FROM \"Barris\")", "geom", "", "id")
-            elif self.dlg.Cmb_Metode.currentText() == "DISTRICTES POSTALS":
-                uri.setDataSource("", "(SELECT * FROM \"DistrictesPostals\")", "geom", "", "id")
-            else:
-                uri.setDataSource("", "(SELECT * FROM \"Districtes\")", "geom", "", "id")
-
-            entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
-            entitatResum = self.comprobarValidez(entitatResum)
-            QApplication.processEvents()
-            QgsProject.instance().addMapLayer(entitatResum, False)
-
-            if indicador == "FinquesAnyConstruccio":
-                if self.dlg.mitjanaRadioButton.isChecked():
-                    vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum",
-                                                     indicador, "first_value")
-                    vlayer_resultat = self.MediaPonderada(vlayer_resultat)
-                else:
-                    vlayer_resultat = self.Agregacio(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate",
-                                                     "modaPonderada", "first_value")
-                    self.progress_changed(70)
-                    QApplication.processEvents()
-
-                    vlayer_resultat.startEditing()
-                    features = vlayer_resultat.getFeatures()
-                    for feature in features:
-                        if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
-                            vlayer_resultat.deleteFeature(feature.id())
-                    vlayer_resultat.commitChanges()
-
-                    vlayer_calculat = self.procesoModaPonderada(vlayer_resultat)
-
-                    QgsProject.instance().addMapLayer(vlayer_calculat, False)
-
-                    vlayer_resultat = self.Agregacio(entitatResum, vlayer_calculat.id(), "intersects", "SupCons", 6, "sum",
-                                                     "modaPonderada2", "first_value")
-                    QgsProject.instance().removeMapLayers([vlayer_calculat.id()])
-            else:
-                vlayer_resultat = self.Agregacio(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum", indicador, "first_value")
-
-            QApplication.processEvents()
-            QgsProject.instance().removeMapLayers([entitatResum.id()])
+            vlayer_resultat = self.agregacio(indicador, uri, vlayer)
 
         '''Transformación del vlayer_resultat a Shape para poder editarlo'''
-        if vlayer_resultat.isValid():
-            self.progress_changed(90)
-            QApplication.processEvents()
-            Area = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
-            """Es crea un Shape a la carpeta temporal amb la data i hora actual"""
-            if (qgis.utils.Qgis.QGIS_VERSION_INT >= 31000):
-                save_options = QgsVectorFileWriter.SaveVectorOptions()
-                save_options.driverName = "ESRI Shapefile"
-                save_options.fileEncoding = "UTF-8"
-                transform_context = QgsProject.instance().transformContext()
-                error = QgsVectorFileWriter.writeAsVectorFormatV2(vlayer_resultat,
-                                                                  TEMPORARY_PATH + "/Area_" + Area + ".shp",
-                                                                  transform_context, save_options)
-            else:
-                error = QgsVectorFileWriter.writeAsVectorFormat(vlayer_resultat,
-                                                                TEMPORARY_PATH + "/Area_" + Area + ".shp",
-                                                                "utf-8", vlayer_resultat.crs(), "ESRI Shapefile")
-            vlayer_resultat = None
-            """Es carrega el Shape a l'entorn del QGIS"""
-            vlayer_resultat = QgsVectorLayer(TEMPORARY_PATH + "/Area_" + Area + ".shp", capa, "ogr")
+        vlayer_resultat = self.vlayerToShape(TEMPORARY_PATH, capa, vlayer_resultat)
 
         if self.dlg.tabWidget.currentIndex() == 0:
             self.progress_changed(95)
@@ -1142,87 +1076,13 @@ class Indicadors_Habitatge:
             vlayer_resultat.updateFields()
 
             '''Cálculo del Indicador'''
-            vlayer_resultat.startEditing()
-            features = vlayer_resultat.getFeatures()
-            index = self.getIndexField(vlayer_resultat, "Indicador")
-            supConsTotal = 0
-            unitatTotal = 0
-            for feature in features:
-                if (feature.attribute("SupCons") == None):
-                    vlayer_resultat.deleteFeature(feature.id())
-                    continue
+            self.calculateIndicador(vlayer_resultat)
 
-                if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
-                    unitat = int(feature.attribute("Habitants"))
-                else:
-                    unitat = float(feature.geometry().area())
+        self.cleanResultInFinquesAnyConstruccio(indicador, vlayer_resultat)
 
-                supCons = feature.attribute("SupCons")
-                if type(supCons) is QVariant:
-                    supCons = supCons.Double
-                else:
-                    supCons = float(supCons)
-                if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatPlanta0Area' and supCons > float(feature.geometry().area()):
-                    supCons = float(feature.geometry().area())
+        self.checkDuplexInMapaAlcades(indicador, vlayer_resultat)
 
-                inverse = self.dlg.inverse_ratio.isChecked()
-                if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
-                    inverse = not inverse
-
-                if not inverse:
-                    if unitat == 0:
-                        value = 0
-                    else:
-                        value = supCons / unitat
-                else:
-                    if supCons == 0:
-                        value = 0
-                    else:
-                        value = unitat / supCons
-                supConsTotal += supCons
-                unitatTotal += unitat
-                vlayer_resultat.changeAttributeValue(feature.id(), index, value)
-
-            '''MEDIA'''
-            if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
-                if not self.dlg.inverse_ratio.isChecked():
-                    if unitatTotal == 0:
-                        media = 0
-                    else:
-                        media = supConsTotal / unitatTotal
-                else:
-                    if supConsTotal == 0:
-                        media = 0
-                    else:
-                        media = unitatTotal / supConsTotal
-                if media != 0:
-                    for feature in vlayer_resultat.getFeatures():
-                        vlayer_resultat.changeAttributeValue(feature.id(), index,
-                                                             feature.attribute("Indicador") / media * 100)
-
-            vlayer_resultat.commitChanges()
-
-        if indicador == "FinquesAnyConstruccio":
-            vlayer_resultat.startEditing()
-            if self.dlg.mitjanaRadioButton.isChecked():
-                vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "SCxAC"))
-            features = vlayer_resultat.getFeatures()
-            index = self.getIndexField(vlayer_resultat, "Any_constr")
-            for feature in features:
-                if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
-                    vlayer_resultat.deleteFeature(feature.id())
-                vlayer_resultat.changeAttributeValue(feature.id(), index, str(feature.attribute("Any_constr"))[:4])
-            vlayer_resultat.commitChanges()
-
-
-        if self.getUnitats() == "hab/m^2 x 10000":
-            vlayer_resultat.startEditing()
-            features = vlayer_resultat.getFeatures()
-            index = self.getIndexField(vlayer_resultat, "Indicador")
-            for feature in features:
-                value = float(feature.attribute("Indicador")) * 10000
-                vlayer_resultat.changeAttributeValue(feature.id(), index, value)
-            vlayer_resultat.commitChanges()
+        self.correctHabitantsHabitatge(vlayer_resultat)
 
         self.mostraSHPperPantalla(vlayer_resultat, capa +" "+self.getUnitats())
         QgsProject.instance().removeMapLayers([vlayer.id()])
@@ -1250,12 +1110,192 @@ class Indicadors_Habitatge:
         self.dlg.setEnabled(True)
 
 
+    def agregacio(self, indicador, uri, vlayer):
+        if self.dlg.Cmb_Metode.currentText() == "ILLES":
+            uri.setDataSource("", "(SELECT * FROM \"ILLES\" WHERE \"D_S_I\" NOT LIKE '' AND \"D_S_I\" IS NOT NULL)",
+                              "geom", "", "id")
+        elif self.dlg.Cmb_Metode.currentText() == "PARCELES":
+            uri.setDataSource("", "(SELECT * FROM \"parcel\")", "geom", "", "id")
+        elif self.dlg.Cmb_Metode.currentText() == "SECCIONS":
+            uri.setDataSource("", "(SELECT * FROM \"Seccions\")", "geom", "", "id")
+        elif self.dlg.Cmb_Metode.currentText() == "BARRIS":
+            uri.setDataSource("", "(SELECT * FROM \"Barris\")", "geom", "", "id")
+        elif self.dlg.Cmb_Metode.currentText() == "DISTRICTES POSTALS":
+            uri.setDataSource("", "(SELECT * FROM \"DistrictesPostals\")", "geom", "", "id")
+        else:
+            uri.setDataSource("", "(SELECT * FROM \"Districtes\")", "geom", "", "id")
+        entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
+        entitatResum = self.comprobarValidez(entitatResum)
+        QApplication.processEvents()
+        QgsProject.instance().addMapLayer(entitatResum, False)
+        if indicador == "FinquesAnyConstruccio":
+            if self.dlg.mitjanaRadioButton.isChecked():
+                vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum",
+                                                     indicador, "first_value")
+                vlayer_resultat = self.MediaPonderada(vlayer_resultat)
+            else:
+                vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate",
+                                                     "modaPonderada", "first_value")
+                self.progress_changed(70)
+                QApplication.processEvents()
+
+                vlayer_resultat.startEditing()
+                features = vlayer_resultat.getFeatures()
+                for feature in features:
+                    if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
+                        vlayer_resultat.deleteFeature(feature.id())
+                vlayer_resultat.commitChanges()
+
+                vlayer_calculat = self.procesoModaPonderada(vlayer_resultat)
+
+                QgsProject.instance().addMapLayer(vlayer_calculat, False)
+
+                vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer_calculat.id(), "intersects", "SupCons", 6,
+                                                     "sum",
+                                                     "modaPonderada2", "first_value")
+                QgsProject.instance().removeMapLayers([vlayer_calculat.id()])
+        else:
+            vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum",
+                                                 indicador, "first_value")
+        QApplication.processEvents()
+        QgsProject.instance().removeMapLayers([entitatResum.id()])
+        return vlayer_resultat
+
+
+    def vlayerToShape(self, TEMPORARY_PATH, capa, vlayer_resultat):
+        if vlayer_resultat.isValid():
+            self.progress_changed(90)
+            QApplication.processEvents()
+            Area = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
+            """Es crea un Shape a la carpeta temporal amb la data i hora actual"""
+            if (qgis.utils.Qgis.QGIS_VERSION_INT >= 31000):
+                save_options = QgsVectorFileWriter.SaveVectorOptions()
+                save_options.driverName = "ESRI Shapefile"
+                save_options.fileEncoding = "UTF-8"
+                transform_context = QgsProject.instance().transformContext()
+                error = QgsVectorFileWriter.writeAsVectorFormatV2(vlayer_resultat,
+                                                                  TEMPORARY_PATH + "/Area_" + Area + ".shp",
+                                                                  transform_context, save_options)
+            else:
+                error = QgsVectorFileWriter.writeAsVectorFormat(vlayer_resultat,
+                                                                TEMPORARY_PATH + "/Area_" + Area + ".shp",
+                                                                "utf-8", vlayer_resultat.crs(), "ESRI Shapefile")
+            vlayer_resultat = None
+            """Es carrega el Shape a l'entorn del QGIS"""
+            vlayer_resultat = QgsVectorLayer(TEMPORARY_PATH + "/Area_" + Area + ".shp", capa, "ogr")
+        return vlayer_resultat
+
+
+    def calculateIndicador(self, vlayer_resultat):
+        vlayer_resultat.startEditing()
+        features = vlayer_resultat.getFeatures()
+        index = self.getIndexField(vlayer_resultat, "Indicador")
+        supConsTotal = 0
+        unitatTotal = 0
+        for feature in features:
+            if (feature.attribute("SupCons") == None):
+                vlayer_resultat.deleteFeature(feature.id())
+                continue
+
+            if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
+                unitat = int(feature.attribute("Habitants"))
+            else:
+                unitat = float(feature.geometry().area())
+
+            supCons = feature.attribute("SupCons")
+            if type(supCons) is QVariant:
+                supCons = supCons.Double
+            else:
+                supCons = float(supCons)
+            if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatPlanta0Area' and supCons > float(
+                    feature.geometry().area()):
+                supCons = float(feature.geometry().area())
+
+            inverse = self.dlg.inverse_ratio.isChecked()
+            if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
+                inverse = not inverse
+
+            if not inverse:
+                if unitat == 0:
+                    value = 0
+                else:
+                    value = supCons / unitat
+            else:
+                if supCons == 0:
+                    value = 0
+                else:
+                    value = unitat / supCons
+            supConsTotal += supCons
+            unitatTotal += unitat
+            vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+        '''MEDIA'''
+        self.calculateMedia(index, supConsTotal, unitatTotal, vlayer_resultat)
+        vlayer_resultat.commitChanges()
+
+
+    def calculateMedia(self, index, supConsTotal, unitatTotal, vlayer_resultat):
+        if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
+            inverse = self.dlg.inverse_ratio.isChecked()
+            if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
+                inverse = not inverse
+
+            if not inverse:
+                if unitatTotal == 0:
+                    media = 0
+                else:
+                    media = supConsTotal / unitatTotal
+            else:
+                if supConsTotal == 0:
+                    media = 0
+                else:
+                    media = unitatTotal / supConsTotal
+            if media != 0:
+                for feature in vlayer_resultat.getFeatures():
+                    vlayer_resultat.changeAttributeValue(feature.id(), index,
+                                                         feature.attribute("Indicador") / media * 100)
+
+    def correctHabitantsHabitatge(self, vlayer_resultat):
+        if self.getUnitats() == "hab/m^2 x 10000":
+            vlayer_resultat.startEditing()
+            features = vlayer_resultat.getFeatures()
+            index = self.getIndexField(vlayer_resultat, "Indicador")
+            for feature in features:
+                value = float(feature.attribute("Indicador")) * 10000
+                vlayer_resultat.changeAttributeValue(feature.id(), index, value)
+            vlayer_resultat.commitChanges()
+
+
+    def cleanResultInFinquesAnyConstruccio(self, indicador, vlayer_resultat):
+        if indicador == "FinquesAnyConstruccio":
+            vlayer_resultat.startEditing()
+            if self.dlg.mitjanaRadioButton.isChecked():
+                vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "SCxAC"))
+            features = vlayer_resultat.getFeatures()
+            index = self.getIndexField(vlayer_resultat, "Any_constr")
+            for feature in features:
+                if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
+                    vlayer_resultat.deleteFeature(feature.id())
+                vlayer_resultat.changeAttributeValue(feature.id(), index, str(feature.attribute("Any_constr"))[:4])
+            vlayer_resultat.commitChanges()
+
+
+    def checkDuplexInMapaAlcades(self, indicador, vlayer_resultat):
+        if indicador == "MapaAlçadesParcel·la":
+            vlayer_resultat.startEditing()
+            features = vlayer_resultat.getFeatures()
+            index = self.getIndexField(vlayer_resultat, "Indicador")
+            for feature in features:
+                if feature.attribute("SupCons") > float(feature.geometry().area()):
+                    vlayer_resultat.changeAttributeValue(feature.id(), index, feature.attribute("Indicador") + 1)
+            vlayer_resultat.commitChanges()
+
+
     # Processing feedback
     def progress_changed(self, progress):
         self.dlg.progressBar.setValue(progress)
 
 
-    def Agregacio(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate,indicador, aggregate):
+    def AgregacioQGIS(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate, indicador, aggregate):
         f = QgsProcessingFeedback()
         f.progressChanged.connect(self.progress_changed)
         if (Qgis.QGIS_VERSION_INT < 30600):
