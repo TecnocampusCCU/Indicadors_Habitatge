@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210423"
+Versio_modul = "V_Q3.210426"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -94,6 +94,8 @@ cur = None
 conn = None
 Path_Inicial = expanduser("~")
 TEMPORARY_PATH=""
+Llista_Metodes=["ILLES","PARCELES","SECCIONS","BARRIS","DISTRICTES POSTALS","DISTRICTES INE","SECTORS"]
+Llista_Camps_Metodes=["ILLES","parcel","Seccions","Barris","DistrictesPostals","Districtes","Sectors"]
 
 class Indicadors_Habitatge:
     """QGIS Plugin Implementation."""
@@ -328,6 +330,9 @@ class Indicadors_Habitatge:
         global schema
         global cur
         global conn
+        global Llista_Metodes
+        global Llista_Camps_Metodes
+
         s = QSettings()
         select = 'Selecciona connexió'
         nom_conn = self.dlg.comboConnexio.currentText()
@@ -373,10 +378,58 @@ class Indicadors_Habitatge:
                 self.dlg.lblEstatConn.setText('Error: Hi ha algun camp erroni.')
                 return
 
+            Metodes, tooltips = self.Comprova_Metodes(Llista_Metodes, Llista_Camps_Metodes, cur)
+            self.populateComboBox_tooltip(self.dlg.Cmb_Metode, Metodes, tooltips, 'Selecciona Mètode', True)
+
 
         else:
             aux = False
             self.barraEstat_noConnectat()
+
+
+    def Comprova_Metodes(self, llista_noms, llista_camps, cur):
+        resultat = []
+
+        resultat_tooltip = []
+        for index, item in enumerate(llista_camps):
+            sql = "select table_name from information_schema.tables where table_name in ('" + item + "') and table_schema ='public'"
+            cur.execute(sql)
+            rows = cur.fetchall()
+            if len(rows) > 0:
+                resultat.append(llista_noms[index])
+                resultat_tooltip.append(llista_camps[index])
+        return resultat, resultat_tooltip
+
+
+    def populateComboBox_tooltip(self,combo,list,tooltip,predef,sort):
+        '''
+        procedure to fill specified combobox with provided list
+        '''
+        combo.blockSignals (True)
+        combo.clear()
+        model=QStandardItemModel(combo)
+        predefInList = None
+        for index,elem in enumerate(list):
+            try:
+                item = QStandardItem(unicode(elem))
+            except TypeError:
+                item = QStandardItem(str(elem))
+            item.setToolTip(tooltip[index])
+            model.appendRow(item)
+            if elem == predef:
+                predefInList = elem
+
+        if sort:
+            model.sort(0)
+        combo.setModel(model)
+        if predef != "":
+            if predefInList:
+                combo.setCurrentIndex(combo.findText(predefInList))
+            else:
+                combo.insertItem(0,predef)
+                combo.setCurrentIndex(0)
+        combo.blockSignals (False)
+
 
     def ompleCombos(self, combo, llista, predef):
         """Aquesta funció omple els combos que li passem per paràmetres"""
@@ -1122,6 +1175,8 @@ class Indicadors_Habitatge:
             uri.setDataSource("", "(SELECT * FROM \"Barris\")", "geom", "", "id")
         elif self.dlg.Cmb_Metode.currentText() == "DISTRICTES POSTALS":
             uri.setDataSource("", "(SELECT * FROM \"DistrictesPostals\")", "geom", "", "id")
+        elif self.dlg.Cmb_Metode.currentText() == "SECTORS":
+            uri.setDataSource("", "(SELECT * FROM \"Sectors\")", "geom", "", "id")
         else:
             uri.setDataSource("", "(SELECT * FROM \"Districtes\")", "geom", "", "id")
         entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
