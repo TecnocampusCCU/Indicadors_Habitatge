@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210426"
+Versio_modul = "V_Q3.210525"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -93,9 +93,10 @@ Fitxer = ""
 cur = None
 conn = None
 Path_Inicial = expanduser("~")
-TEMPORARY_PATH=""
-Llista_Metodes=["ILLES","PARCELES","SECCIONS","BARRIS","DISTRICTES POSTALS","DISTRICTES INE","SECTORS"]
-Llista_Camps_Metodes=["ILLES","parcel","Seccions","Barris","DistrictesPostals","Districtes","Sectors"]
+TEMPORARY_PATH = ""
+Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE", "SECTORS"]
+Llista_Camps_Metodes = ["ILLES", "parcel", "Seccions", "Barris", "DistrictesPostals", "Districtes", "Sectors"]
+
 
 class Indicadors_Habitatge:
     """QGIS Plugin Implementation."""
@@ -386,7 +387,6 @@ class Indicadors_Habitatge:
             aux = False
             self.barraEstat_noConnectat()
 
-
     def Comprova_Metodes(self, llista_noms, llista_camps, cur):
         resultat = []
 
@@ -400,16 +400,15 @@ class Indicadors_Habitatge:
                 resultat_tooltip.append(llista_camps[index])
         return resultat, resultat_tooltip
 
-
-    def populateComboBox_tooltip(self,combo,list,tooltip,predef,sort):
+    def populateComboBox_tooltip(self, combo, list, tooltip, predef, sort):
         '''
         procedure to fill specified combobox with provided list
         '''
-        combo.blockSignals (True)
+        combo.blockSignals(True)
         combo.clear()
-        model=QStandardItemModel(combo)
+        model = QStandardItemModel(combo)
         predefInList = None
-        for index,elem in enumerate(list):
+        for index, elem in enumerate(list):
             try:
                 item = QStandardItem(unicode(elem))
             except TypeError:
@@ -426,10 +425,9 @@ class Indicadors_Habitatge:
             if predefInList:
                 combo.setCurrentIndex(combo.findText(predefInList))
             else:
-                combo.insertItem(0,predef)
+                combo.insertItem(0, predef)
                 combo.setCurrentIndex(0)
-        combo.blockSignals (False)
-
+        combo.blockSignals(False)
 
     def ompleCombos(self, combo, llista, predef):
         """Aquesta funció omple els combos que li passem per paràmetres"""
@@ -508,19 +506,23 @@ class Indicadors_Habitatge:
         llista = ['MapaAlçadesParcel·la']
         self.ompleCombos(self.dlg.comboIndicador_3, llista, "Selecciona un indicador")
         self.SetTooltipIndicadors()
-        if (os.name=='nt'):
-            TEMPORARY_PATH=os.environ['TMP']
+        if (os.name == 'nt'):
+            TEMPORARY_PATH = os.environ['TMP']
         else:
-            TEMPORARY_PATH=os.environ['TMPDIR']
+            TEMPORARY_PATH = os.environ['TMPDIR']
 
     def SetTooltipIndicadors(self):
-        self.dlg.comboIndicador.setItemData(1,"Sup. construïda amb ús d'habitatge/nombre d'habitants",QtCore.Qt.ToolTipRole)
-        self.dlg.comboIndicador.setItemData(2,"Sup. construïda amb ús d'habitatge/Sup. geomètrica (solar)",QtCore.Qt.ToolTipRole)
-        self.dlg.comboIndicador.setItemData(3,"Sup. construïda per a qualsevol ús/Sup. geometrica (solar)",QtCore.Qt.ToolTipRole)
-        self.dlg.comboIndicador.setItemData(4,"Sup. construïda en planta baixa/Sup. geomètrica (solar)",QtCore.Qt.ToolTipRole)
-        self.dlg.comboIndicador_2.setItemData(1,"Any construcció",QtCore.Qt.ToolTipRole)
-        self.dlg.comboIndicador_3.setItemData(1,"Nombre de plantes edifici mes alt de la parcel·la",QtCore.Qt.ToolTipRole)
-
+        self.dlg.comboIndicador.setItemData(1, "Sup. construïda amb ús d'habitatge/nombre d'habitants",
+                                            QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador.setItemData(2, "Sup. construïda amb ús d'habitatge/Sup. geomètrica (solar)",
+                                            QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador.setItemData(3, "Sup. construïda per a qualsevol ús/Sup. geometrica (solar)",
+                                            QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador.setItemData(4, "Sup. construïda en planta baixa/Sup. geomètrica (solar)",
+                                            QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador_2.setItemData(1, "Any construcció", QtCore.Qt.ToolTipRole)
+        self.dlg.comboIndicador_3.setItemData(1, "Nombre de plantes edifici mes alt de la parcel·la",
+                                              QtCore.Qt.ToolTipRole)
 
     def on_checkRB_color(self, enabled):
         if enabled:
@@ -642,7 +644,6 @@ class Indicadors_Habitatge:
             WHERE fp."Superficie_cons" IS NOT NULL AND fp."Superficie_cons" NOT LIKE '0' 
             GROUP BY "parcel"."geom", "parcel"."UTM", "Pis"'''
 
-
     def getIndicador2(self):
         currentComboText = self.dlg.comboIndicador_2.currentText()
         if currentComboText == 'FinquesAnyConstruccio':
@@ -658,14 +659,15 @@ class Indicadors_Habitatge:
             WHERE fus."Superficie_Cons" IS NOT NULL AND fac."Any_constr" IS NOT NULL 
             GROUP BY "parcel"."geom", "parcel"."UTM", fac."Any_constr"'''
 
-
     def getIndicador3(self):
         currentComboText = self.dlg.comboIndicador_3.currentText()
         if currentComboText == 'MapaAlçadesParcel·la':
-            return '''SELECT * FROM mapa_alcades'''
+            return '''SELECT m.* FROM mapa_alcades''' + Fitxer + ''' AS m
+            INNER JOIN
+            (SELECT MAX("Indicador") AS "Indicador", "UTM" FROM mapa_alcades''' + Fitxer + ''' GROUP BY "UTM") max_table
+            ON m."Indicador" = max_table."Indicador" AND m."UTM" = max_table."UTM"'''
 
-
-    def getMaterializedView(self):
+    def getTableAlcades(self):
         return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",
         (CASE
         WHEN alt."Indicador" != -1 THEN
@@ -684,14 +686,13 @@ class Indicadors_Habitatge:
         ELSE
         1 END)
         END) AS "Indicador",
-        SUM("Superficie_cons"::INTEGER) AS "SupCons"
+        ("Superficie_cons"::INTEGER) AS "SupCons"
         FROM "FinquesPlantes"
         WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
-        GROUP BY "UTM")
+        GROUP BY "UTM", "Superficie_cons")
         AS alt ON "parcel"."UTM" = alt."UTM"
         WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0
         ORDER BY 4;'''
-
 
     def getUnitats(self):
         if self.dlg.tabWidget.currentIndex() == 0:
@@ -830,7 +831,8 @@ class Indicadors_Habitatge:
 
                     layer_settings.isExpression = True
                     if self.dlg.tabWidget.currentIndex() != 1:
-                        layer_settings.fieldName = "to_string(round( \"Indicador\"," + str(self.dlg.decimals.value()) + "))"
+                        layer_settings.fieldName = "to_string(round( \"Indicador\"," + str(
+                            self.dlg.decimals.value()) + "))"
                     else:
                         layer_settings.fieldName = "to_string(round( \"Any_constr\"," + str(
                             self.dlg.decimals.value()) + "))"
@@ -893,12 +895,11 @@ class Indicadors_Habitatge:
     def procesoModaPonderada(self, vlayer):
         f = QgsProcessingFeedback()
         if (Qgis.QGIS_VERSION_INT < 30600):
-            sortida='memory:'
+            sortida = 'memory:'
         else:
-            sortida='TEMPORARY_OUTPUT'
+            sortida = 'TEMPORARY_OUTPUT'
 
-
-        parameters = {'CATEGORIES_FIELD_NAME': ['Any_constr','id_agrupat'],
+        parameters = {'CATEGORIES_FIELD_NAME': ['Any_constr', 'id_agrupat'],
                       'INPUT': vlayer,
                       'OUTPUT': sortida,
                       'VALUES_FIELD_NAME': 'SupCons'}
@@ -932,14 +933,13 @@ class Indicadors_Habitatge:
             'FIELD': 'id_agrupat',
             'FIELDS_TO_COPY': ['Any'],
             'FIELD_2': 'id_agrupat',
-            'METHOD':1,
-            'PREFIX':'',
+            'METHOD': 1,
+            'PREFIX': '',
             'OUTPUT': sortida
         }
         result = processing.run('native:joinattributestable', parameters, feedback=f)
 
         return result['OUTPUT']
-
 
     def MediaPonderada(self, vlayer):
         vlayer.startEditing()
@@ -965,7 +965,6 @@ class Indicadors_Habitatge:
             vlayer.changeAttributeValue(feature.id(), index, value)
         vlayer.commitChanges()
         return vlayer
-
 
     def on_click_Inici(self):
         '''
@@ -1028,14 +1027,16 @@ class Indicadors_Habitatge:
             sql = self.getIndicador2()
             indicador = self.dlg.comboIndicador_2.currentText()
         else:
+            cur.execute(
+                "DROP TABLE IF EXISTS mapa_alcades" + Fitxer + "")
+            conn.commit()
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS mapa_alcades" + Fitxer + " AS " + self.getTableAlcades())
+            conn.commit()
             sql = self.getIndicador3()
             indicador = self.dlg.comboIndicador_3.currentText()
-            cur.execute(
-                "CREATE MATERIALIZED VIEW IF NOT EXISTS mapa_alcades AS "+self.getMaterializedView())
-            conn.commit()
-            cur.execute("REFRESH MATERIALIZED VIEW mapa_alcades")
-            conn.commit()
 
+        vlayer = None
         uri.setDataSource("", "(" + sql + ")", "geom", "", "id")
         if self.dlg.tabWidget.currentIndex() == 2:
             capa = "PARCELES"
@@ -1104,19 +1105,35 @@ class Indicadors_Habitatge:
 
         self.progress_changed(10)
         QApplication.processEvents()
-        vlayer = QgsVectorLayer(uri.uri(False), capa, "postgres")
-        vlayer = self.comprobarValidez(vlayer)
+        if self.dlg.Cmb_Metode.currentText() == "ILLES":
+            cur.execute(
+                "DROP TABLE IF EXISTS habitatge" + Fitxer + "")
+            conn.commit()
+            cur.execute(
+                "CREATE TABLE IF NOT EXISTS habitatge" + Fitxer + " AS " + sql)
+            conn.commit()
+        else:
+            vlayer = QgsVectorLayer(uri.uri(False), capa, "postgres")
+            vlayer = self.comprobarValidez(vlayer)
 
+            QApplication.processEvents()
+            QgsProject.instance().addMapLayer(vlayer, False)
         QApplication.processEvents()
-        QgsProject.instance().addMapLayer(vlayer, False)
-
 
         self.progress_changed(20)
         if self.dlg.tabWidget.currentIndex() == 2 or self.dlg.Cmb_Metode.currentText() == "PARCELES":
             vlayer_resultat = vlayer
         else:
             '''Agregación en función del método de trabajo'''
-            vlayer_resultat = self.agregacio(indicador, uri, vlayer)
+            if self.dlg.Cmb_Metode.currentText() == "ILLES":
+                '''Debido a que la agregación de parcelas con ILLES es muy costosa, utilizamos un procedimiento distinto
+                en este caso. Para ello, se hace uso de una tabla intermedia que relaciona parcel con ILLES por atributo
+                y no por geometría'''
+                vlayer_resultat = self.agregacionIlles(Fitxer, indicador, uri)
+            else:
+                vlayer_resultat = self.agregacio(indicador, uri, vlayer)
+
+            QApplication.processEvents()
 
         '''Transformación del vlayer_resultat a Shape para poder editarlo'''
         vlayer_resultat = self.vlayerToShape(TEMPORARY_PATH, capa, vlayer_resultat)
@@ -1137,14 +1154,16 @@ class Indicadors_Habitatge:
 
         self.correctHabitantsHabitatge(vlayer_resultat)
 
-        self.mostraSHPperPantalla(vlayer_resultat, capa +" "+self.getUnitats())
-        QgsProject.instance().removeMapLayers([vlayer.id()])
+        self.mostraSHPperPantalla(vlayer_resultat, capa + " " + self.getUnitats())
+        if vlayer is not None:
+            QgsProject.instance().removeMapLayers([vlayer.id()])
 
         QApplication.processEvents()
         iface.mapCanvas().refresh()
         drop = ''
         drop += 'DROP TABLE IF EXISTS "tr_temp' + Fitxer + '";\n'
-        drop += 'DROP TABLE IF EXISTS "LayerExportat' + Fitxer + '";\n'
+        drop += 'DROP TABLE IF EXISTS habitatge' + Fitxer + ';\n'
+        drop += 'DROP TABLE IF EXISTS mapa_alcades' + Fitxer + ';\n'
         try:
             cur.execute(drop)
             conn.commit()
@@ -1162,6 +1181,80 @@ class Indicadors_Habitatge:
         self.barraEstat_connectat()
         self.dlg.setEnabled(True)
 
+    def agregacionIlles(self, Fitxer, indicador, uri):
+        if indicador == 'DensitatHabitantsHabitatge':
+            uri.setDataSource("", """(SELECT "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I", 
+                                        SUM(hab."Habitants"::INTEGER) AS "Habitants", SUM(hab."SupCons"::INTEGER) AS "SupCons"
+                                        FROM "ILLES" JOIN "parcel_illes" ON ("ILLES"."D_S_I" = "parcel_illes"."D_S_I") 
+                                        JOIN habitatge""" + Fitxer + """ AS hab ON ("parcel_illes"."UTM" = hab."UTM")
+                                        WHERE "ILLES"."D_S_I" NOT LIKE ''
+                                        GROUP BY "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I")""",
+                              "geom", "", "id")
+            vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
+            vlayer_resultat = self.comprobarValidez(vlayer_resultat)
+        elif indicador == "FinquesAnyConstruccio":
+            if self.dlg.mitjanaRadioButton.isChecked():
+                uri.setDataSource("", """(SELECT "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I", 
+                                                SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons"
+                                                FROM "ILLES" JOIN "parcel_illes" ON ("ILLES"."D_S_I" = "parcel_illes"."D_S_I") 
+                                                JOIN habitatge""" + Fitxer + """ AS hab ON ("parcel_illes"."UTM" = hab."UTM")
+                                                WHERE "ILLES"."D_S_I" NOT LIKE ''
+                                                GROUP BY "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I")""",
+                                  "geom", "", "id")
+                vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
+                vlayer_resultat = self.comprobarValidez(vlayer_resultat)
+
+                vlayer_resultat = self.MediaPonderada(vlayer_resultat)
+            else:
+                vlayer_resultat = self.modaPonderadaIlles(Fitxer, uri)
+
+        else:
+            uri.setDataSource("", """(SELECT "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I", 
+                    SUM(hab."SupCons"::INTEGER) AS "SupCons"
+                    FROM "ILLES" JOIN "parcel_illes" ON ("ILLES"."D_S_I" = "parcel_illes"."D_S_I") 
+                    JOIN habitatge""" + Fitxer + """ AS hab ON ("parcel_illes"."UTM" = hab."UTM")
+                    WHERE "ILLES"."D_S_I" NOT LIKE ''
+                    GROUP BY "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I")""",
+                              "geom", "", "id")
+            vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
+            vlayer_resultat = self.comprobarValidez(vlayer_resultat)
+        return vlayer_resultat
+
+    def modaPonderadaIlles(self, Fitxer, uri):
+        uri.setDataSource("", """(SELECT "hab".id, "hab"."UTM", "hab"."SupCons","hab"."Any_constr", "hab".geom, "ILLES".id AS id_agrupat
+                                                FROM "ILLES" JOIN "parcel_illes" ON ("ILLES"."D_S_I" = "parcel_illes"."D_S_I") 
+                                                JOIN habitatge""" + Fitxer + """ AS hab ON ("parcel_illes"."UTM" = hab."UTM"))""",
+                          "geom", "", "id")
+        vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
+        vlayer_resultat = self.comprobarValidez(vlayer_resultat)
+        self.progress_changed(70)
+        QApplication.processEvents()
+        vlayer_resultat.startEditing()
+        features = vlayer_resultat.getFeatures()
+        for feature in features:
+            if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
+                vlayer_resultat.deleteFeature(feature.id())
+        vlayer_resultat.commitChanges()
+        vlayer_calculat = self.procesoModaPonderada(vlayer_resultat)
+        QgsProject.instance().addMapLayer(vlayer_calculat, False)
+        uri.setDataSource("",
+                          "(SELECT * FROM \"ILLES\" WHERE \"D_S_I\" NOT LIKE '' AND \"D_S_I\" IS NOT NULL)",
+                          "geom", "", "id")
+        entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
+        entitatResum = self.comprobarValidez(entitatResum)
+        QApplication.processEvents()
+        QgsProject.instance().addMapLayer(entitatResum, False)
+        self.progress_changed(75)
+        vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer_calculat.id(), "intersects",
+                                             "SupCons", 6,
+                                             "sum",
+                                             "modaPonderada2", "first_value")
+        self.progress_changed(80)
+        QApplication.processEvents()
+        QgsProject.instance().removeMapLayers([vlayer_calculat.id()])
+        QgsProject.instance().removeMapLayers([entitatResum.id()])
+        vlayer_resultat = self.comprobarValidez(vlayer_resultat)
+        return vlayer_resultat
 
     def agregacio(self, indicador, uri, vlayer):
         if self.dlg.Cmb_Metode.currentText() == "ILLES":
@@ -1216,7 +1309,6 @@ class Indicadors_Habitatge:
         QgsProject.instance().removeMapLayers([entitatResum.id()])
         return vlayer_resultat
 
-
     def vlayerToShape(self, TEMPORARY_PATH, capa, vlayer_resultat):
         if vlayer_resultat.isValid():
             self.progress_changed(90)
@@ -1239,7 +1331,6 @@ class Indicadors_Habitatge:
             """Es carrega el Shape a l'entorn del QGIS"""
             vlayer_resultat = QgsVectorLayer(TEMPORARY_PATH + "/Area_" + Area + ".shp", capa, "ogr")
         return vlayer_resultat
-
 
     def calculateIndicador(self, vlayer_resultat):
         vlayer_resultat.startEditing()
@@ -1287,7 +1378,6 @@ class Indicadors_Habitatge:
         self.calculateMedia(index, supConsTotal, unitatTotal, vlayer_resultat)
         vlayer_resultat.commitChanges()
 
-
     def calculateMedia(self, index, supConsTotal, unitatTotal, vlayer_resultat):
         if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
             inverse = self.dlg.inverse_ratio.isChecked()
@@ -1319,7 +1409,6 @@ class Indicadors_Habitatge:
                 vlayer_resultat.changeAttributeValue(feature.id(), index, value)
             vlayer_resultat.commitChanges()
 
-
     def cleanResultInFinquesAnyConstruccio(self, indicador, vlayer_resultat):
         if indicador == "FinquesAnyConstruccio":
             vlayer_resultat.startEditing()
@@ -1333,7 +1422,6 @@ class Indicadors_Habitatge:
                 vlayer_resultat.changeAttributeValue(feature.id(), index, str(feature.attribute("Any_constr"))[:4])
             vlayer_resultat.commitChanges()
 
-
     def checkDuplexInMapaAlcades(self, indicador, vlayer_resultat):
         if indicador == "MapaAlçadesParcel·la":
             vlayer_resultat.startEditing()
@@ -1344,19 +1432,18 @@ class Indicadors_Habitatge:
                     vlayer_resultat.changeAttributeValue(feature.id(), index, feature.attribute("Indicador") + 1)
             vlayer_resultat.commitChanges()
 
-
     # Processing feedback
     def progress_changed(self, progress):
         self.dlg.progressBar.setValue(progress)
 
-
-    def AgregacioQGIS(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate, indicador, aggregate):
+    def AgregacioQGIS(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate, indicador,
+                      aggregate):
         f = QgsProcessingFeedback()
         f.progressChanged.connect(self.progress_changed)
         if (Qgis.QGIS_VERSION_INT < 30600):
-            sortida='memory:'
+            sortida = 'memory:'
         else:
-            sortida='TEMPORARY_OUTPUT'
+            sortida = 'TEMPORARY_OUTPUT'
         alg = {
             'FIELD_LENGTH': 80,
             'FIELD_NAME': 'UUID',
@@ -1400,7 +1487,7 @@ class Indicadors_Habitatge:
                                 'type': 2}],
                 'OUTPUT': sortida
             }
-        elif indicador=="FinquesAnyConstruccio":
+        elif indicador == "FinquesAnyConstruccio":
             alg_params = {
                 # Entitat Resum
                 'INPUT': ILLES_UNIQUE['OUTPUT'],
@@ -1421,13 +1508,13 @@ class Indicadors_Habitatge:
                                 'precision': -1,
                                 'type': tipus
                                 },
-                                {'aggregate': 'first_value',
-                                 'delimiter': ',',
-                                 'input': 'aggregate( \'' + Entitat_Detall + '\', \'sum\',\"SCxAC\", intersects( $geometry , geometry( @parent)))',
-                                 'length': 0,
-                                 'name': 'SCxAC',
-                                 'precision': 0,
-                                 'type': 2}],
+                               {'aggregate': 'first_value',
+                                'delimiter': ',',
+                                'input': 'aggregate( \'' + Entitat_Detall + '\', \'sum\',\"SCxAC\", intersects( $geometry , geometry( @parent)))',
+                                'length': 0,
+                                'name': 'SCxAC',
+                                'precision': 0,
+                                'type': 2}],
                 'OUTPUT': sortida
             }
         elif indicador == "modaPonderada":
@@ -1454,7 +1541,7 @@ class Indicadors_Habitatge:
                 'OUTPUT': sortida
             }
             camp = camp + "_agrupat"
-        elif indicador=="modaPonderada2":
+        elif indicador == "modaPonderada2":
             alg_params = {
                 # Entitat Resum
                 'INPUT': ILLES_UNIQUE['OUTPUT'],
@@ -1475,13 +1562,13 @@ class Indicadors_Habitatge:
                                 'precision': -1,
                                 'type': tipus
                                 },
-                                {'aggregate': 'first_value',
-                                 'delimiter': ',',
-                                 'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'max\',expression:=\"Any\", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')',
-                                 'length': 0,
-                                 'name': 'Any_constr',
-                                 'precision': 0,
-                                 'type': 2}],
+                               {'aggregate': 'first_value',
+                                'delimiter': ',',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'max\',expression:=\"Any\", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'length': 0,
+                                'name': 'Any_constr',
+                                'precision': 0,
+                                'type': 2}],
                 'OUTPUT': sortida
             }
         else:
@@ -1620,5 +1707,3 @@ class Indicadors_Habitatge:
             # Do something useful here - delete the line containing pass and
             # substitute with your code.
             pass
-
-
