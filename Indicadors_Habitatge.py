@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210617"
+Versio_modul = "V_Q3.210622"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -662,13 +662,14 @@ class Indicadors_Habitatge:
     def getIndicador3(self):
         currentComboText = self.dlg.comboIndicador_3.currentText()
         if currentComboText == 'MapaAlçadesParcel·la':
-            return '''SELECT m.* FROM mapa_alcades''' + Fitxer + ''' AS m
+            return '''SELECT DISTINCT m.* FROM mapa_alcades''' + Fitxer + ''' AS m
             INNER JOIN
             (SELECT MAX("Indicador") AS "Indicador", "UTM" FROM mapa_alcades''' + Fitxer + ''' GROUP BY "UTM") max_table
             ON m."Indicador" = max_table."Indicador" AND m."UTM" = max_table."UTM"'''
 
     def getTableAlcades(self):
-        return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",
+        return '''SELECT m.*, f."Pis" FROM
+        (SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",
         (CASE
         WHEN alt."Indicador" != -1 THEN
         alt."Indicador"
@@ -691,8 +692,8 @@ class Indicadors_Habitatge:
         WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
         GROUP BY "UTM", "Superficie_cons")
         AS alt ON "parcel"."UTM" = alt."UTM"
-        WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0
-        ORDER BY 4;'''
+        WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0) AS m
+		LEFT JOIN (SELECT "UTM", "Pis" FROM "FinquesPlantes" WHERE "Pis" LIKE 'AT') AS f ON m."UTM" = f."UTM";'''
 
     def getUnitats(self):
         if self.dlg.tabWidget.currentIndex() == 0:
@@ -1430,6 +1431,9 @@ class Indicadors_Habitatge:
             for feature in features:
                 if feature.attribute("SupCons") > float(feature.geometry().area()):
                     vlayer_resultat.changeAttributeValue(feature.id(), index, feature.attribute("Indicador") + 1)
+                if feature.attribute("Pis") == "AT":
+                    vlayer_resultat.changeAttributeValue(feature.id(), index, feature.attribute("Indicador") + 1)
+            vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "Pis"))
             vlayer_resultat.commitChanges()
 
     # Processing feedback
