@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210622"
+Versio_modul = "V_Q3.210714"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -1032,7 +1032,7 @@ class Indicadors_Habitatge:
                 "DROP TABLE IF EXISTS mapa_alcades" + Fitxer + "")
             conn.commit()
             cur.execute(
-                "CREATE TABLE IF NOT EXISTS mapa_alcades" + Fitxer + " AS " + self.getTableAlcades())
+                "CREATE TABLE mapa_alcades" + Fitxer + " AS " + self.getTableAlcades())
             conn.commit()
             sql = self.getIndicador3()
             indicador = self.dlg.comboIndicador_3.currentText()
@@ -1106,12 +1106,12 @@ class Indicadors_Habitatge:
 
         self.progress_changed(10)
         QApplication.processEvents()
-        if self.dlg.Cmb_Metode.currentText() == "ILLES":
+        if self.dlg.Cmb_Metode.currentText() == "ILLES" == self.dlg.tabWidget.currentIndex() == 0:
             cur.execute(
                 "DROP TABLE IF EXISTS habitatge" + Fitxer + "")
             conn.commit()
             cur.execute(
-                "CREATE TABLE IF NOT EXISTS habitatge" + Fitxer + " AS " + sql)
+                "CREATE TABLE habitatge" + Fitxer + " AS " + sql)
             conn.commit()
         else:
             vlayer = QgsVectorLayer(uri.uri(False), capa, "postgres")
