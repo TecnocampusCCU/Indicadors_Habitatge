@@ -1106,7 +1106,7 @@ class Indicadors_Habitatge:
 
         self.progress_changed(10)
         QApplication.processEvents()
-        if self.dlg.Cmb_Metode.currentText() == "ILLES" and self.dlg.tabWidget.currentIndex() == 0:
+        if self.dlg.Cmb_Metode.currentText() == "ILLES" and self.dlg.tabWidget.currentIndex() != 2:
             cur.execute(
                 "DROP TABLE IF EXISTS habitatge" + Fitxer + "")
             conn.commit()
