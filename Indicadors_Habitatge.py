@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210714"
+Versio_modul = "V_Q3.210722"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -1106,7 +1106,7 @@ class Indicadors_Habitatge:
 
         self.progress_changed(10)
         QApplication.processEvents()
-        if self.dlg.Cmb_Metode.currentText() == "ILLES" == self.dlg.tabWidget.currentIndex() == 0:
+        if self.dlg.Cmb_Metode.currentText() == "ILLES" and self.dlg.tabWidget.currentIndex() == 0:
             cur.execute(
                 "DROP TABLE IF EXISTS habitatge" + Fitxer + "")
             conn.commit()
