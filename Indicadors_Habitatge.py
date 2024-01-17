@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.210722"
+Versio_modul = "V_Q3.240117"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -93,7 +93,6 @@ Fitxer = ""
 cur = None
 conn = None
 Path_Inicial = expanduser("~")
-TEMPORARY_PATH = ""
 Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE", "SECTORS"]
 Llista_Camps_Metodes = ["ILLES", "parcel", "Seccions", "Barris", "DistrictesPostals", "Districtes", "Sectors"]
 
@@ -410,7 +409,7 @@ class Indicadors_Habitatge:
         predefInList = None
         for index, elem in enumerate(list):
             try:
-                item = QStandardItem(unicode(elem))
+                item = QStandardItem(str(elem))
             except TypeError:
                 item = QStandardItem(str(elem))
             item.setToolTip(tooltip[index])
@@ -438,7 +437,7 @@ class Indicadors_Habitatge:
         for elem in llista:
             try:
                 if isinstance(elem, tuple):
-                    item = QStandardItem(unicode(elem[0]))
+                    item = QStandardItem(str(elem[0]))
                 else:
                     item = QStandardItem(str(elem))
             except TypeError:
@@ -466,7 +465,6 @@ class Indicadors_Habitatge:
         global Versio_modul
         global itemSel
         global lbl_Cost
-        global TEMPORARY_PATH
         aux = False
         itemSel = None
         self.barraEstat_noConnectat()
@@ -506,10 +504,6 @@ class Indicadors_Habitatge:
         llista = ['MapaAlçadesParcel·la']
         self.ompleCombos(self.dlg.comboIndicador_3, llista, "Selecciona un indicador")
         self.SetTooltipIndicadors()
-        if (os.name == 'nt'):
-            TEMPORARY_PATH = os.environ['TMP']
-        else:
-            TEMPORARY_PATH = os.environ['TMPDIR']
 
     def SetTooltipIndicadors(self):
         self.dlg.comboIndicador.setItemData(1, "Sup. construïda amb ús d'habitatge/nombre d'habitants",
@@ -627,8 +621,8 @@ class Indicadors_Habitatge:
         currentComboText = self.dlg.comboIndicador.currentText()
         if currentComboText == 'DensitatHabitantsHabitatge':
             return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons",  tr."Habitants"
-            FROM "parcel"  LEFT JOIN "tr_temp''' + fitxer + '''" AS tr ON "parcel"."UTM" = tr."Parcela" LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM"
-            WHERE fus."Superficie_Cons" IS NOT NULL AND tr."Habitants" IS NOT NULL'''
+            FROM "parcel"  LEFT JOIN "tr_temp''' + fitxer + '''" AS tr ON "parcel"."UTM" = tr."Parcela"  AND tr."Habitants" IS NOT NULL
+            LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM" AND fus."Superficie_Cons" IS NOT NULL'''
         elif currentComboText == 'DensitatHabitatgeÀrea':
             return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons", ST_Area(geom)
             FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM"
@@ -731,37 +725,21 @@ class Indicadors_Habitatge:
             return ""
         return ""
 
-    def mostraSHPperPantalla(self, vlayer, capa):
+    def mostraLayerPerPantalla(self, vlayer):
         global nomBD1
         global contra1
         global host1
         global port1
         global usuari1
         global micolorTag
-        global TEMPORARY_PATH
-        uri = QgsDataSourceUri()
         try:
-            QApplication.processEvents()
             if vlayer.isValid():
-                QApplication.processEvents()
-                Area = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
-                """Es crea un Shape a la carpeta temporal amb la data i hora actual"""
-                if (qgis.utils.Qgis.QGIS_VERSION_INT>=31004):
-                    save_options = QgsVectorFileWriter.SaveVectorOptions()
-                    save_options.driverName = "ESRI Shapefile"
-                    save_options.fileEncoding = "UTF-8"
-                    transform_context = QgsProject.instance().transformContext()
-                    error = QgsVectorFileWriter.writeAsVectorFormatV2(vlayer,
-                                                                      TEMPORARY_PATH + "/Area_" + Area + ".shp",
-                                                                      transform_context, save_options)
-                else:
-                    error = QgsVectorFileWriter.writeAsVectorFormat(vlayer,
-                                                                    TEMPORARY_PATH + "/Area_" + Area + ".shp",
-                                                                    "utf-8", vlayer.crs(), "ESRI Shapefile")
-                vlayer = None
-                """Es carrega el Shape a l'entorn del QGIS"""
-                vlayer = QgsVectorLayer(TEMPORARY_PATH + "/Area_" + Area + ".shp", capa, "ogr")
-                symbols = vlayer.renderer().symbols(QgsRenderContext())
+                vlayer_temp = QgsVectorLayer("Polygon", self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
+                vlayer_temp.setCrs(vlayer.dataProvider().sourceCrs())
+                vlayer_temp.dataProvider().addAttributes(vlayer.dataProvider().fields())
+                vlayer_temp.updateFields()
+                vlayer_temp.dataProvider().addFeatures(vlayer.getFeatures())
+                symbols = vlayer_temp.renderer().symbols(QgsRenderContext())
                 symbol = symbols[0]
                 if self.dlg.RB_color.isChecked():
                     symbol.setColor(self.dlg.color.palette().color(1))
@@ -774,7 +752,6 @@ class Indicadors_Habitatge:
                     template = "%1 - %2 " + self.getUnitats()
 
                     numberOfClasses = int(float(self.dlg.LE_rang.value()))
-                    myRangeList = []
                     mysymbol = QgsFillSymbol()
                     if (self.dlg.ColorDegradat.currentText() == 'Gris'):
                         colorRamp = QgsGradientColorRamp(QColor(230, 230, 230), QColor(60, 60, 60))
@@ -796,28 +773,28 @@ class Indicadors_Habitatge:
                     format.setPrecision(precision)
                     format.setTrimTrailingZeroes(False)
                     if (self.dlg.combo_Tipus.currentText() == 'Quantil'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer, fieldname, numberOfClasses,
+                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
                                                                              QgsGraduatedSymbolRenderer.Quantile,
                                                                              mysymbol, colorRamp)
                     elif (self.dlg.combo_Tipus.currentText() == 'Interval igual'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer, fieldname, numberOfClasses,
+                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
                                                                              QgsGraduatedSymbolRenderer.EqualInterval,
                                                                              mysymbol, colorRamp)
                     elif (self.dlg.combo_Tipus.currentText() == 'Ruptures naturals'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer, fieldname, numberOfClasses,
+                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
                                                                              QgsGraduatedSymbolRenderer.Jenks, mysymbol,
                                                                              colorRamp)
                     elif (self.dlg.combo_Tipus.currentText() == 'Desviació estandard'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer, fieldname, numberOfClasses,
+                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
                                                                              QgsGraduatedSymbolRenderer.StdDev,
                                                                              mysymbol, colorRamp)
                     elif (self.dlg.combo_Tipus.currentText() == 'Pretty breaks'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer, fieldname, numberOfClasses,
+                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
                                                                              QgsGraduatedSymbolRenderer.Pretty,
                                                                              mysymbol, colorRamp)
                     renderer.setLabelFormat(format, True)
-                    vlayer.setOpacity(self.dlg.Transparencia.value() / 100)
-                    vlayer.setRenderer(renderer)
+                    vlayer_temp.setOpacity(self.dlg.Transparencia.value() / 100)
+                    vlayer_temp.setRenderer(renderer)
                     QApplication.processEvents()
 
                 if self.dlg.CB_etiquetes.isChecked():
@@ -841,23 +818,23 @@ class Indicadors_Habitatge:
                         layer_settings.fieldName += "+'%'"
                     QApplication.processEvents()
 
-                    layer_settings.placement = 1
+                    layer_settings.placement = QgsPalLayerSettings.AroundPoint
                     layer_settings.scaleVisibility = True
                     layer_settings.minimumScale = float(self.dlg.max.value())
                     layer_settings.maximumScale = float(self.dlg.min.value())
                     layer_settings.enabled = True
 
                     settings = QgsVectorLayerSimpleLabeling(layer_settings)
-                    vlayer.setLabelsEnabled(True)
-                    vlayer.setLabeling(settings)
-                    vlayer.setScaleBasedVisibility(True)
+                    vlayer_temp.setLabelsEnabled(True)
+                    vlayer_temp.setLabeling(settings)
+                    vlayer_temp.setScaleBasedVisibility(True)
 
-                    vlayer.triggerRepaint()
+                    vlayer_temp.triggerRepaint()
 
                 QApplication.processEvents()
-                QgsProject.instance().addMapLayer(vlayer, False)
+                QgsProject.instance().addMapLayer(vlayer_temp, False)
                 root = QgsProject.instance().layerTreeRoot()
-                myLayerNode = QgsLayerTreeLayer(vlayer)
+                myLayerNode = QgsLayerTreeLayer(vlayer_temp)
                 root.insertChildNode(0, myLayerNode)
                 myLayerNode.setCustomProperty("showFeatureCount", True)
                 iface.mapCanvas().refresh()
@@ -984,7 +961,6 @@ class Indicadors_Habitatge:
 
         global lbl_Cost
         global Fitxer
-        global TEMPORARY_PATH
 
         QApplication.processEvents()
         Fitxer = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
@@ -1038,7 +1014,8 @@ class Indicadors_Habitatge:
             indicador = self.dlg.comboIndicador_3.currentText()
 
         vlayer = None
-        uri.setDataSource("", "(" + sql + ")", "geom", "", "id")
+        uri.setDataSource("","("+sql+")","geom","","id")
+
         if self.dlg.tabWidget.currentIndex() == 2:
             capa = "PARCELES"
         else:
@@ -1071,7 +1048,6 @@ class Indicadors_Habitatge:
                                           vec[0] + "', " + vec[1] + ");\n"
                             cur.execute(insert)
                             conn.commit()
-                            # print "ok"
                         except Exception as ex:
                             print("Problem reading csv")
                             template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -1114,11 +1090,17 @@ class Indicadors_Habitatge:
                 "CREATE TABLE habitatge" + Fitxer + " AS " + sql)
             conn.commit()
         else:
-            vlayer = QgsVectorLayer(uri.uri(False), capa, "postgres")
-            vlayer = self.comprobarValidez(vlayer)
-
-            QApplication.processEvents()
-            QgsProject.instance().addMapLayer(vlayer, False)
+            titol = capa.encode('utf8', 'strict')
+            vlayer = QgsVectorLayer(uri.uri(), titol.decode('utf8'), "postgres")
+            if vlayer.isValid():
+                vlayer_temp = QgsVectorLayer("Polygon", capa, "memory")
+                vlayer_temp.setCrs(vlayer.dataProvider().sourceCrs())
+                vlayer_temp.dataProvider().addAttributes(vlayer.fields())
+                vlayer_temp.updateFields()
+                vlayer_temp.dataProvider().addFeatures(vlayer.getFeatures())
+                vlayer = self.comprobarValidez(vlayer_temp)
+                QApplication.processEvents()
+                QgsProject.instance().addMapLayer(vlayer, False)
         QApplication.processEvents()
 
         self.progress_changed(20)
@@ -1136,9 +1118,6 @@ class Indicadors_Habitatge:
 
             QApplication.processEvents()
 
-        '''Transformación del vlayer_resultat a Shape para poder editarlo'''
-        vlayer_resultat = self.vlayerToShape(TEMPORARY_PATH, capa, vlayer_resultat)
-
         if self.dlg.tabWidget.currentIndex() == 0:
             self.progress_changed(95)
             vlayer_resultat.startEditing()
@@ -1155,7 +1134,7 @@ class Indicadors_Habitatge:
 
         self.correctHabitantsHabitatge(vlayer_resultat)
 
-        self.mostraSHPperPantalla(vlayer_resultat, capa + " " + self.getUnitats())
+        self.mostraLayerPerPantalla(vlayer_resultat)
         if vlayer is not None:
             QgsProject.instance().removeMapLayers([vlayer.id()])
 
@@ -1218,7 +1197,14 @@ class Indicadors_Habitatge:
                     GROUP BY "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I")""",
                               "geom", "", "id")
             vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
-            vlayer_resultat = self.comprobarValidez(vlayer_resultat)
+        
+        crs = vlayer_resultat.dataProvider().sourceCrs()
+        vlayer_resultat_temp = QgsVectorLayer("Polygon", self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
+        vlayer_resultat_temp.setCrs(crs)
+        vlayer_resultat_temp.dataProvider().addAttributes(vlayer_resultat.fields())
+        vlayer_resultat_temp.updateFields()
+        vlayer_resultat_temp.dataProvider().addFeatures(vlayer_resultat.getFeatures())
+        vlayer_resultat = self.comprobarValidez(vlayer_resultat_temp)
         return vlayer_resultat
 
     def modaPonderadaIlles(self, Fitxer, uri):
@@ -1254,7 +1240,21 @@ class Indicadors_Habitatge:
         QApplication.processEvents()
         QgsProject.instance().removeMapLayers([vlayer_calculat.id()])
         QgsProject.instance().removeMapLayers([entitatResum.id()])
-        vlayer_resultat = self.comprobarValidez(vlayer_resultat)
+        crs = vlayer_resultat.dataProvider().sourceCrs()
+        if str(vlayer_resultat.geometryType()) == "GeometryType.Polygon":
+            tipus = "Polygon"
+        elif str(vlayer_resultat.geometryType()) == "GeometryType.Point":
+            tipus = "Point"
+        elif str(vlayer_resultat.geometryType()) == "GeometryType.Line":
+            tipus = "LineString"
+        else:
+            tipus = "NoGeometry"
+        vlayer_resultat_temp = QgsVectorLayer(tipus, self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
+        vlayer_resultat_temp.setCrs(crs)
+        vlayer_resultat_temp.dataProvider().addAttributes(vlayer_resultat.fields())
+        vlayer_resultat_temp.updateFields()
+        vlayer_resultat_temp.dataProvider().addFeatures(vlayer_resultat.getFeatures())
+        vlayer_resultat = self.comprobarValidez(vlayer_resultat_temp)
         return vlayer_resultat
 
     def agregacio(self, indicador, uri, vlayer):
@@ -1308,29 +1308,21 @@ class Indicadors_Habitatge:
                                                  indicador, "first_value")
         QApplication.processEvents()
         QgsProject.instance().removeMapLayers([entitatResum.id()])
-        return vlayer_resultat
-
-    def vlayerToShape(self, TEMPORARY_PATH, capa, vlayer_resultat):
-        if vlayer_resultat.isValid():
-            self.progress_changed(90)
-            QApplication.processEvents()
-            Area = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
-            """Es crea un Shape a la carpeta temporal amb la data i hora actual"""
-            if (qgis.utils.Qgis.QGIS_VERSION_INT>=31004):
-                save_options = QgsVectorFileWriter.SaveVectorOptions()
-                save_options.driverName = "ESRI Shapefile"
-                save_options.fileEncoding = "UTF-8"
-                transform_context = QgsProject.instance().transformContext()
-                error = QgsVectorFileWriter.writeAsVectorFormatV2(vlayer_resultat,
-                                                                  TEMPORARY_PATH + "/Area_" + Area + ".shp",
-                                                                  transform_context, save_options)
-            else:
-                error = QgsVectorFileWriter.writeAsVectorFormat(vlayer_resultat,
-                                                                TEMPORARY_PATH + "/Area_" + Area + ".shp",
-                                                                "utf-8", vlayer_resultat.crs(), "ESRI Shapefile")
-            vlayer_resultat = None
-            """Es carrega el Shape a l'entorn del QGIS"""
-            vlayer_resultat = QgsVectorLayer(TEMPORARY_PATH + "/Area_" + Area + ".shp", capa, "ogr")
+        crs = vlayer_resultat.dataProvider().sourceCrs()
+        if str(vlayer_resultat.geometryType()) == "GeometryType.Polygon":
+            tipus = "Polygon"
+        elif str(vlayer_resultat.geometryType()) == "GeometryType.Point":
+            tipus = "Point"
+        elif str(vlayer_resultat.geometryType()) == "GeometryType.Line":
+            tipus = "LineString"
+        else:
+            tipus = "NoGeometry"
+        vlayer_resultat_temp = QgsVectorLayer(tipus, self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
+        vlayer_resultat_temp.setCrs(crs)
+        vlayer_resultat_temp.dataProvider().addAttributes(vlayer_resultat.fields())
+        vlayer_resultat_temp.updateFields()
+        vlayer_resultat_temp.dataProvider().addFeatures(vlayer_resultat.getFeatures())
+        vlayer_resultat = self.comprobarValidez(vlayer_resultat_temp)
         return vlayer_resultat
 
     def calculateIndicador(self, vlayer_resultat):
@@ -1340,12 +1332,19 @@ class Indicadors_Habitatge:
         supConsTotal = 0
         unitatTotal = 0
         for feature in features:
-            if (feature.attribute("SupCons") == None):
+            if feature.attribute("SupCons") is None:
                 vlayer_resultat.deleteFeature(feature.id())
                 continue
+            
+            
 
             if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
-                unitat = int(feature.attribute("Habitants"))
+                habitants = feature.attribute("Habitants")
+                if type(habitants) is QVariant:
+                    habitants = habitants.Double
+                else:
+                    habitants = float(habitants)
+                unitat = int(habitants)
             else:
                 unitat = float(feature.geometry().area())
 
