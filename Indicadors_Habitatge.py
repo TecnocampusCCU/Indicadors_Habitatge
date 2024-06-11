@@ -82,7 +82,7 @@ from itertools import dropwhile
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.240117"
+Versio_modul = "V_Q3.240611"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -90,12 +90,14 @@ port1 = ""
 usuari1 = ""
 schema = ""
 Fitxer = ""
+versio_db = ""
 cur = None
 conn = None
 Path_Inicial = expanduser("~")
-Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE", "SECTORS"]
-Llista_Camps_Metodes = ["ILLES", "parcel", "Seccions", "Barris", "DistrictesPostals", "Districtes", "Sectors"]
-
+#Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE", "SECTORS"]
+Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE"]
+#Llista_Camps_Metodes = ["ILLES", "parcel", "Seccions", "Barris", "DistrictesPostals", "Districtes", "Sectors"]
+Llista_Camps_Metodes = ["zone", "parcel_temp", "seccions", "barris", "districtes_postals", "districtes"]
 
 class Indicadors_Habitatge:
     """QGIS Plugin Implementation."""
@@ -366,7 +368,18 @@ class Indicadors_Habitatge:
                 self.barraEstat_connectat()
                 cur = conn.cursor()
 
-
+                try:
+                    self.detect_database_version()
+                except Exception as ex:
+                    print("No s'ha pogut detectar la versio de la BBDD")
+                    template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                    message = template.format(type(ex).__name__, ex.args)
+                    print(message)
+                    QMessageBox.information(None, "Error", "Error canvi connexió")
+                    conn.rollback()
+                    self.dlg.lblEstatConn.setStyleSheet('border:1px solid #000000; background-color: #ff7f7f')
+                    self.dlg.lblEstatConn.setText('Error: Hi ha algun camp erroni.')
+                    return
             except Exception as ex:
                 print("I am unable to connect to the database")
                 template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -385,6 +398,96 @@ class Indicadors_Habitatge:
         else:
             aux = False
             self.barraEstat_noConnectat()
+
+    def detect_database_version(self):
+        global cur
+        global conn
+        global versio_db
+        sql = "select taula from config where variable = 'versio';"
+        cur.execute(sql)
+        versio_db = cur.fetchone()[0]
+        print("Versió de la base de dades: " + versio_db)
+
+        if versio_db == '1.0':
+            try:
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "parcel_temp";
+                            CREATE TABLE "parcel_temp" AS
+                                id_parcel,
+                                geom,
+                                cadastral_reference
+                            ) AS SELECT "id", "geom", "utm_total" FROM parcel;
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "zone";
+                            CREATE LOCAL TEMP TABLE "zone" (
+                                id_zone,
+                                geom,
+                                cadastral_zoning_reference
+                            ) AS SELECT "id", "geom", "D_S_I" FROM "ILLES";
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "address";
+                            CREATE LOCAL TEMP TABLE "address" (
+                                id_address,
+                                geom,
+                                cadastral_reference,
+                                designator
+                            ) AS SELECT "id", "geom", "REF_CADAST", "Carrer_Num_Bis" FROM "dintreilla";
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "building";
+                            CREATE LOCAL TEMP TABLE "building" (
+                                id_building,
+                                geom,
+                                cadastral_reference,
+                                current_use
+                            ) AS SELECT "id", "geom", "Ref_Cadastral", "Us" FROM "FinquesUS";
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "building_floor";
+                            CREATE LOCAL TEMP TABLE "building_floor" (
+                                id_floor,
+                                cadastral_reference,
+                                stairs,
+                                floor,
+                                built_surface
+                            ) AS SELECT "id", "Ref_Cadastral", "Escala", "Pis", "Superficie_cons" FROM "FinquesPlantes";
+                            """)
+                conn.commit()
+            except Exception as ex:
+                print("Error creant taules temporals per a la versió 1.0")
+                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                print(message)
+                QMessageBox.information(None, "Error", "Error canvi connexió")
+                conn.rollback()
+                self.dlg.lblEstatConn.setStyleSheet('border:1px solid #000000; background-color: #ff7f7f')
+                self.dlg.lblEstatConn.setText('Error: Hi ha algun camp erroni.')
+                return
+        elif versio_db == '2.0':
+            try:
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "parcel_temp";
+                            CREATE TABLE "parcel_temp" AS SELECT * FROM parcel;
+                            """)
+                conn.commit()
+            except Exception as ex:
+                print("Error creant taules temporals per a la versió 2.0")
+                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                print(message)
+                QMessageBox.information(None, "Error", "Error canvi connexió")
+                conn.rollback()
+                self.dlg.lblEstatConn.setStyleSheet('border:1px solid #000000; background-color: #ff7f7f')
+                self.dlg.lblEstatConn.setText('Error: Hi ha algun camp erroni.')
+                return
+        else:
+                raise Exception("Versió de la base de dades no reconeguda")
 
     def Comprova_Metodes(self, llista_noms, llista_camps, cur):
         resultat = []
@@ -476,9 +579,9 @@ class Indicadors_Habitatge:
         self.dlg.checkbox_media.setChecked(False)
         self.dlg.color.setEnabled(True)
         self.dlg.Transparencia.setEnabled(True)
-        self.dlg.comboIndicador.clear;
-        self.dlg.comboIndicador_2.clear;
-        self.dlg.comboIndicador_3.clear;
+        self.dlg.comboIndicador.clear
+        self.dlg.comboIndicador_2.clear
+        self.dlg.comboIndicador_3.clear
         self.dlg.CB_etiquetes.setChecked(False)
         self.dlg.mitjanaRadioButton.setChecked(True)
         self.dlg.mida.setEnabled(False)
@@ -516,7 +619,7 @@ class Indicadors_Habitatge:
                                             QtCore.Qt.ToolTipRole)
         self.dlg.comboIndicador_2.setItemData(1, "Any construcció", QtCore.Qt.ToolTipRole)
         self.dlg.comboIndicador_3.setItemData(1, "Nombre de plantes edifici mes alt de la parcel·la",
-                                              QtCore.Qt.ToolTipRole)
+                                            QtCore.Qt.ToolTipRole)
 
     def on_checkRB_color(self, enabled):
         if enabled:
@@ -620,74 +723,214 @@ class Indicadors_Habitatge:
     def getIndicador(self, fitxer):
         currentComboText = self.dlg.comboIndicador.currentText()
         if currentComboText == 'DensitatHabitantsHabitatge':
-            return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons",  tr."Habitants"
-            FROM "parcel"  LEFT JOIN "tr_temp''' + fitxer + '''" AS tr ON "parcel"."UTM" = tr."Parcela"  AND tr."Habitants" IS NOT NULL
-            LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM" AND fus."Superficie_Cons" IS NOT NULL'''
+            return  f'''
+                    SELECT DISTINCT ON (parcel_temp.id_parcel)
+                        parcel_temp.id_parcel,
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        building_floor.built_surface AS "SupCons",
+                        tr."Habitants"
+                    FROM
+                        parcel_temp
+                        LEFT JOIN tr_temp{fitxer} AS tr 
+                            ON parcel_temp.cadastral_reference = tr."Parcela" AND tr."Habitants" IS NOT NULL
+                        LEFT JOIN building_floor 
+                        ON parcel_temp.cadastral_reference = building_floor.cadastral_reference AND building_floor.built_surface IS NOT NULL
+                    WHERE
+                        building_floor.built_surface IS NOT NULL
+                    '''
         elif currentComboText == 'DensitatHabitatgeÀrea':
-            return '''SELECT "parcel"."id", "parcel"."geom", "parcel"."UTM",  fus."Superficie_Cons" AS "SupCons", ST_Area(geom)
-            FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesUS" WHERE "Us" LIKE 'V') AS fus ON "parcel"."UTM" = fus."UTM"
-            WHERE fus."Superficie_Cons" IS NOT NULL'''
+            # TODO: Revisar que les JOIN estiguin ben fetes, la JOIN de la building_floor abans no hi era però ara és necessari perquè els camps de les taules han canviat
+            return  f'''
+                    SELECT DISTINCT ON (parcel_temp.id_parcel)
+                        parcel_temp.id_parcel,
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        building_floor.built_surface AS "SupCons",
+                        ST_Area(parcel_temp.geom)
+                    FROM
+                        parcel_temp
+                        LEFT JOIN (
+                            SELECT *
+                            FROM building
+                            WHERE current_use LIKE '1_residential'
+                        ) AS edif
+                            ON parcel_temp.cadastral_reference = edif.cadastral_reference
+                        LEFT JOIN building_floor
+                            ON building_floor.cadastral_reference = edif.cadastral_reference
+                                AND building_floor.built_surface IS NOT NULL
+                    WHERE
+                        building_floor.built_surface IS NOT NULL
+                    '''
         elif currentComboText == 'DensitatEdificis':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM",  SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons"
-            FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
-            WHERE fus."Superficie_Cons" IS NOT NULL
-            GROUP BY "parcel"."geom", "parcel"."UTM"'''
+            return f'''
+                    SELECT
+                        ROW_NUMBER() OVER (
+                            ORDER BY parcel_temp.cadastral_reference
+                        ) AS "id_parcel",
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        SUM(building_floor.built_surface::INTEGER) AS "SupCons"
+                    FROM
+                        parcel_temp
+                        LEFT JOIN building_floor
+                            ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
+                    WHERE
+                        building_floor.built_surface IS NOT NULL
+                    GROUP BY
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference
+                    '''
         elif currentComboText == 'DensitatPlanta0Area':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM", SUM(fp."Superficie_cons"::INTEGER) AS "SupCons", "Pis"
-            FROM "parcel" LEFT JOIN (SELECT * FROM  "FinquesPlantes" WHERE "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')) AS fp ON "parcel"."UTM" = fp."UTM"
-            WHERE fp."Superficie_cons" IS NOT NULL AND fp."Superficie_cons" NOT LIKE '0' 
-            GROUP BY "parcel"."geom", "parcel"."UTM", "Pis"'''
+            return f'''
+                    SELECT
+                        ROW_NUMBER() OVER (
+                            ORDER BY parcel_temp.cadastral_reference
+                        ) AS "id_parcel",
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        SUM(building_floor.built_surface::INTEGER) AS "SupCons",
+                        building_floor.floor
+                    FROM
+                        parcel_temp
+                        LEFT JOIN (
+                            SELECT *
+                            FROM building_floor
+                            WHERE floor IN ('0', '00', 'BX', 'BJ', 'OD', '0P', '0A')
+                                OR (floor LIKE 'UE' AND stairs LIKE 'S')
+                        ) AS building_floor
+                        ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
+                    WHERE
+                        building_floor.built_surface IS NOT NULL AND building_floor.built_surface != 0
+                    GROUP BY
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        building_floor.floor
+                    '''
+
 
     def getIndicador2(self):
         currentComboText = self.dlg.comboIndicador_2.currentText()
         if currentComboText == 'FinquesAnyConstruccio':
-            return '''SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."UTM") AS "id", "parcel"."geom", "parcel"."UTM",
-            SUM(fus."Superficie_Cons"::INTEGER) AS "SupCons",
-            fac."Any_constr", (SUM(fus."Superficie_Cons"::INTEGER) * fac."Any_constr"::INTEGER) AS "SCxAC"
-            FROM "parcel" LEFT JOIN "FinquesUS" AS fus ON "parcel"."UTM" = fus."UTM"
-            LEFT JOIN (SELECT "UTM", MAX("Any_constr") AS "Any_constr"
-            FROM  "FinquesAnyConstruccio"  
-            WHERE "Any_constr" 
-            BETWEEN \'''' + str(int(self.dlg.any_inici.value())) + '\' AND \'' + str(int(self.dlg.any_fi.value())) + '''\'
-            GROUP BY "UTM") AS fac ON "parcel"."UTM" = fac."UTM" 
-            WHERE fus."Superficie_Cons" IS NOT NULL AND fac."Any_constr" IS NOT NULL 
-            GROUP BY "parcel"."geom", "parcel"."UTM", fac."Any_constr"'''
+            # TODO: Revisar que l'SQL estigui bé perquè ja no tenim la taula FinquesAnyConstrucció, ara l'any es troba en format de Date a la taula building
+            return f'''
+                    SELECT
+                        ROW_NUMBER() OVER (
+                            ORDER BY parcel_temp.cadastral_reference
+                        ) AS "id_parcel",
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        SUM(building_floor.built_surface::INTEGER) AS "SupCons",
+                        b_year.date_of_construction,
+                        (SUM(building_floor.built_surface::INTEGER) * b_year.date_of_construction) AS "SCxAC"
+                    FROM
+                        parcel_temp
+                        LEFT JOIN building_floor
+                            ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
+                        LEFT JOIN (
+                            SELECT cadastral_reference, MAX(EXTRACT(YEAR FROM date_of_construction)::INTEGER)::INTEGER AS date_of_construction
+                            FROM building
+                            WHERE EXTRACT(YEAR FROM date_of_construction) BETWEEN {str(int(self.dlg.any_inici.value()))} AND {str(int(self.dlg.any_fi.value()))}
+                            GROUP BY cadastral_reference
+                        ) AS b_year
+                            ON parcel_temp.cadastral_reference = b_year.cadastral_reference
+                    WHERE
+                        building_floor.built_surface IS NOT NULL AND b_year.date_of_construction IS NOT NULL
+                    GROUP BY
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        b_year.date_of_construction
+                    '''
 
     def getIndicador3(self):
         currentComboText = self.dlg.comboIndicador_3.currentText()
         if currentComboText == 'MapaAlçadesParcel·la':
-            return '''SELECT DISTINCT m.* FROM mapa_alcades''' + Fitxer + ''' AS m
-            INNER JOIN
-            (SELECT MAX("Indicador") AS "Indicador", "UTM" FROM mapa_alcades''' + Fitxer + ''' GROUP BY "UTM") max_table
-            ON m."Indicador" = max_table."Indicador" AND m."UTM" = max_table."UTM"'''
+            return f'''
+                    SELECT
+                        DISTINCT m.*
+                    FROM
+                        mapa_alcades{Fitxer} AS m
+                        INNER JOIN (
+                            SELECT
+                                MAX("Indicador") AS "Indicador",
+                                cadastral_reference
+                            FROM
+                                mapa_alcades{Fitxer}
+                            GROUP BY
+                                cadastral_reference
+                        ) max_table
+                            ON m."Indicador" = max_table."Indicador"
+                            AND m.cadastral_reference = max_table.cadastral_reference
+                    '''
 
     def getTableAlcades(self):
-        return '''SELECT m.*, f."Pis" FROM
-        (SELECT ROW_NUMBER () OVER (ORDER BY "parcel"."id") AS "id", "parcel"."geom", "parcel"."UTM",
-        (CASE
-        WHEN alt."Indicador" != -1 THEN
-        alt."Indicador"
-        ELSE
-        (("SupCons"::INTEGER)/ST_Area("geom")::INTEGER)+1 END) AS "Indicador", alt."SupCons"
-        FROM "parcel" LEFT JOIN
-        (SELECT "UTM", MAX(
-        CASE
-        WHEN "Pis" ~ '^[0-9\.]+$' THEN
-        CAST ("Pis" AS INTEGER)+1
-        ELSE
-        (CASE
-        WHEN "Pis" LIKE 'OD' THEN
-        -1
-        ELSE
-        1 END)
-        END) AS "Indicador",
-        ("Superficie_cons"::INTEGER) AS "SupCons"
-        FROM "FinquesPlantes"
-        WHERE "Pis" ~ '^[0-9\.]+$' OR "Pis" IN ('0', '00','BX', 'BJ', 'OD', 'OP', 'OA') OR ("Pis" LIKE 'UE' AND "Escala" LIKE 'S')
-        GROUP BY "UTM", "Superficie_cons")
-        AS alt ON "parcel"."UTM" = alt."UTM"
-        WHERE alt."Indicador" IS NOT NULL AND alt."SupCons" != 0) AS m
-		LEFT JOIN (SELECT "UTM", "Pis" FROM "FinquesPlantes" WHERE "Pis" LIKE 'AT') AS f ON m."UTM" = f."UTM";'''
+        return f'''
+                SELECT
+                    m.*,
+                    f.floor
+                FROM
+                    (
+                        SELECT
+                            ROW_NUMBER() OVER (
+                                ORDER BY parcel_temp.id_parcel
+                            ) AS "id_parcel",
+                            parcel_temp.geom,
+                            parcel_temp.cadastral_reference,
+                            (
+                                CASE
+                                    WHEN alt."Indicador" != -1 THEN
+                                        alt."Indicador"
+                                    ELSE ( ("SupCons"::INTEGER) / ST_Area("geom")::INTEGER ) + 1
+                                END
+                            ) AS "Indicador",
+                            alt."SupCons"
+                        FROM
+                            parcel_temp
+                            LEFT JOIN (
+                                SELECT
+                                    cadastral_reference,
+                                    MAX(
+                                        CASE
+                                            WHEN floor ~ '^[0-9\.]+$' THEN
+                                                CAST(floor AS INTEGER) + 1
+                                            ELSE
+                                                (
+                                                    CASE
+                                                        WHEN floor LIKE 'OD' THEN
+                                                            -1
+                                                        ELSE
+                                                            1
+                                                    END
+                                                )
+                                        END
+                                    ) AS "Indicador",
+                                    (built_surface::INTEGER) AS "SupCons"
+                                FROM
+                                    building_floor
+                                WHERE
+                                    floor ~ '^[0-9\.]+$'
+                                    OR floor IN ('0', '00', 'BX', 'BJ', 'OD', 'OP', 'OA')
+                                    OR (floor LIKE 'UE' AND stairs LIKE 'S')
+                                GROUP BY
+                                    cadastral_reference,
+                                    built_surface
+                            ) AS alt
+                                ON parcel_temp.cadastral_reference = alt.cadastral_reference
+                        WHERE
+                            alt."Indicador" IS NOT NULL
+                            AND alt."SupCons" != 0
+                    ) AS m
+                    LEFT JOIN (
+                        SELECT
+                            cadastral_reference,
+                            floor
+                        FROM
+                            building_floor
+                        WHERE
+                            floor LIKE 'AT'
+                    ) AS f
+                        ON m.cadastral_reference = f.cadastral_reference
+                '''
 
     def getUnitats(self):
         if self.dlg.tabWidget.currentIndex() == 0:
@@ -701,24 +944,24 @@ class Indicadors_Habitatge:
 
         if currentComboText == 'DensitatHabitantsHabitatge':
             if not self.dlg.inverse_ratio.isChecked():
-                return "hab/m^2 x 10000"
+                return "hab/m² x 10000"
             else:
-                return "m^2/hab"
+                return "m²/hab"
         elif currentComboText == 'DensitatHabitatgeÀrea':
             if not self.dlg.inverse_ratio.isChecked():
-                return "m^2/m^2"
+                return "m²/m²"
             else:
-                return "m^2/m^2"
+                return "m²/m²"
         elif currentComboText == 'DensitatEdificis':
             if not self.dlg.inverse_ratio.isChecked():
-                return "m^2/m^2"
+                return "m²/m²"
             else:
-                return "m^2/m^2"
+                return "m²/m²"
         elif currentComboText == 'DensitatPlanta0Area':
             if not self.dlg.inverse_ratio.isChecked():
-                return "m^2/m^2"
+                return "m²/m²"
             else:
-                return "m^2/m^2"
+                return "m²/m²"
         elif currentComboText == 'FinquesAnyConstruccio':
             return ""
         elif currentComboText == 'MapaAlçadesParcel·la':
@@ -734,11 +977,18 @@ class Indicadors_Habitatge:
         global micolorTag
         try:
             if vlayer.isValid():
-                vlayer_temp = QgsVectorLayer("Polygon", self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
-                vlayer_temp.setCrs(vlayer.dataProvider().sourceCrs())
+                crs = vlayer.dataProvider().sourceCrs()
+                if self.dlg.tabWidget.currentIndex() != 2:
+                    nomCapa = self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats()
+                else:
+                    # TODO: Preguntar al Josep o al Miquel què hauria de posar al nom de la capa, abans sortia Sel·lecciona mètode, per tant he escrit PARCELES com a placeholder
+                    nomCapa = 'PARCELES'
+                vlayer_temp = QgsVectorLayer(f"Polygon?crs={crs.authid()}", nomCapa, "memory")
+                vlayer_temp.setCrs(crs)
                 vlayer_temp.dataProvider().addAttributes(vlayer.dataProvider().fields())
                 vlayer_temp.updateFields()
                 vlayer_temp.dataProvider().addFeatures(vlayer.getFeatures())
+                vlayer_temp.updateExtents()
                 symbols = vlayer_temp.renderer().symbols(QgsRenderContext())
                 symbol = symbols[0]
                 if self.dlg.RB_color.isChecked():
@@ -748,7 +998,7 @@ class Indicadors_Habitatge:
                     if self.dlg.tabWidget.currentIndex() != 1:
                         fieldname = "Indicador"
                     else:
-                        fieldname = "Any_constr"
+                        fieldname = "date_of_construction"
                     template = "%1 - %2 " + self.getUnitats()
 
                     numberOfClasses = int(float(self.dlg.LE_rang.value()))
@@ -812,7 +1062,9 @@ class Indicadors_Habitatge:
                         layer_settings.fieldName = "to_string(round( \"Indicador\"," + str(
                             self.dlg.decimals.value()) + "))"
                     else:
-                        layer_settings.fieldName = "to_string(round( \"Any_constr\"," + str(
+                        # layer_settings.fieldName = "to_string(round( \"Any_constr\"," + str(
+                        ### layer_settings.fieldName = "to_string(round( \"built_surface\"," + str(
+                        layer_settings.fieldName = "to_string(round( \"date_of_construction\"," + str(
                             self.dlg.decimals.value()) + "))"
                     if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
                         layer_settings.fieldName += "+'%'"
@@ -877,18 +1129,19 @@ class Indicadors_Habitatge:
         else:
             sortida = 'TEMPORARY_OUTPUT'
 
-        parameters = {'CATEGORIES_FIELD_NAME': ['Any_constr', 'id_agrupat'],
+        parameters = {'CATEGORIES_FIELD_NAME': ['date_of_construction', 'id_agrupat'],
                       'INPUT': vlayer,
                       'OUTPUT': sortida,
                       'VALUES_FIELD_NAME': 'SupCons'}
         result = processing.run('qgis:statisticsbycategories', parameters)
+        print("Proceso moda ponderada 1")
 
         parameters = {
             'INPUT': result['OUTPUT'],
             'GROUP_BY': 'id_agrupat',
             'AGGREGATES': [{'aggregate': 'concatenate',
                             'delimiter': '',
-                            'input': 'if(sum=maximum(sum,group_by:=id_agrupat),\"Any_constr\",\'\')',
+                            'input': 'if(sum=maximum(sum,group_by:=id_agrupat),to_string(\"date_of_construction\"),\'\')',
                             'length': -1,
                             'name': 'Any',
                             'precision': -1,
@@ -903,6 +1156,7 @@ class Indicadors_Habitatge:
             'OUTPUT': sortida
         }
         result = processing.run('qgis:aggregate', parameters, feedback=f)
+        print("Proceso moda ponderada 2")
 
         parameters = {
             'INPUT': vlayer,
@@ -916,18 +1170,19 @@ class Indicadors_Habitatge:
             'OUTPUT': sortida
         }
         result = processing.run('native:joinattributestable', parameters, feedback=f)
+        print("Proceso moda ponderada 3")
 
         return result['OUTPUT']
 
     def MediaPonderada(self, vlayer):
         vlayer.startEditing()
-        vlayer.addAttribute(QgsField('Any_constr', QVariant.Int))
+        vlayer.addAttribute(QgsField('date_of_construction', QVariant.Int))
         vlayer.commitChanges()
         vlayer.updateFields()
 
         vlayer.startEditing()
         features = vlayer.getFeatures()
-        index = self.getIndexField(vlayer, "Any_constr")
+        index = self.getIndexField(vlayer, "date_of_construction")
         for feature in features:
             unitat = int(feature.attribute("SCxAC"))
             supCons = feature.attribute("SupCons")
@@ -997,6 +1252,20 @@ class Indicadors_Habitatge:
         QApplication.processEvents()
         self.progress_changed(5)
 
+        try:
+            self.detect_database_version()
+        except Exception as ex:
+            print("Error a la creacio taules temporals bd")
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+            message = template.format(type(ex).__name__, ex.args)
+            print(message)
+            QMessageBox.information(None, "Error", "Error a la connexio")
+            conn.rollback()
+            self.dlg.setEnabled(True)
+            self.progress_changed(0)
+            self.barraEstat_connectat()
+            return
+
         if self.dlg.tabWidget.currentIndex() == 0:
             sql = self.getIndicador(Fitxer)
             indicador = self.dlg.comboIndicador.currentText()
@@ -1014,7 +1283,7 @@ class Indicadors_Habitatge:
             indicador = self.dlg.comboIndicador_3.currentText()
 
         vlayer = None
-        uri.setDataSource("","("+sql+")","geom","","id")
+        uri.setDataSource("","("+sql+")","geom","","id_parcel")
 
         if self.dlg.tabWidget.currentIndex() == 2:
             capa = "PARCELES"
@@ -1030,10 +1299,14 @@ class Indicadors_Habitatge:
             noTrobat = True
             while noTrobat:
                 if (path != ''):
-                    if (os.path.exists(path + "/tr_parceles.csv")):
+                    if versio_db == '1.0':
+                        nom_path_parceles = path + "/tr_parceles_v1.csv"
+                    else:
+                        nom_path_parceles = path + "/tr_parceles_v2.csv"
+                    if (os.path.exists(nom_path_parceles)):
                         noTrobat = False
 
-                        arxiu = open(path + "/tr_parceles.csv", 'r')
+                        arxiu = open(nom_path_parceles, 'r')
                         dummy = arxiu.readline()
                         lines = arxiu.readlines()
                         try:
@@ -1083,21 +1356,21 @@ class Indicadors_Habitatge:
         self.progress_changed(10)
         QApplication.processEvents()
         if self.dlg.Cmb_Metode.currentText() == "ILLES" and self.dlg.tabWidget.currentIndex() != 2:
-            cur.execute(
-                "DROP TABLE IF EXISTS habitatge" + Fitxer + "")
+            cur.execute("DROP TABLE IF EXISTS habitatge" + Fitxer + "")
             conn.commit()
-            cur.execute(
-                "CREATE TABLE habitatge" + Fitxer + " AS " + sql)
+            cur.execute("CREATE TABLE habitatge" + Fitxer + " AS " + sql)
             conn.commit()
         else:
             titol = capa.encode('utf8', 'strict')
-            vlayer = QgsVectorLayer(uri.uri(), titol.decode('utf8'), "postgres")
+            vlayer = QgsVectorLayer(uri.uri(False), titol.decode('utf8'), "postgres")
             if vlayer.isValid():
-                vlayer_temp = QgsVectorLayer("Polygon", capa, "memory")
-                vlayer_temp.setCrs(vlayer.dataProvider().sourceCrs())
+                crs = vlayer.dataProvider().sourceCrs()
+                vlayer_temp = QgsVectorLayer(f"Polygon?crs={crs.authid()}", capa, "memory")
+                vlayer_temp.setCrs(crs)
                 vlayer_temp.dataProvider().addAttributes(vlayer.fields())
                 vlayer_temp.updateFields()
                 vlayer_temp.dataProvider().addFeatures(vlayer.getFeatures())
+                vlayer_temp.updateExtents()
                 vlayer = self.comprobarValidez(vlayer_temp)
                 QApplication.processEvents()
                 QgsProject.instance().addMapLayer(vlayer, False)
@@ -1112,9 +1385,33 @@ class Indicadors_Habitatge:
                 '''Debido a que la agregación de parcelas con ILLES es muy costosa, utilizamos un procedimiento distinto
                 en este caso. Para ello, se hace uso de una tabla intermedia que relaciona parcel con ILLES por atributo
                 y no por geometría'''
-                vlayer_resultat = self.agregacionIlles(Fitxer, indicador, uri)
+                try:
+                    vlayer_resultat = self.agregacionIlles(Fitxer, indicador, uri)
+                except Exception as ex:
+                    print("Error en la agregaciónilles")
+                    template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                    message = template.format(type(ex).__name__, ex.args)
+                    print(message)
+                    QMessageBox.information(None, "Error", "Error en la agregación")
+                    conn.rollback()
+                    self.progress_changed(0)
+                    self.dlg.setEnabled(True)
+                    self.barraEstat_connectat()
+                    return
             else:
-                vlayer_resultat = self.agregacio(indicador, uri, vlayer)
+                try:
+                    vlayer_resultat = self.agregacio(indicador, uri, vlayer)
+                except Exception as ex:
+                    print("Error en la agregacio")
+                    template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                    message = template.format(type(ex).__name__, ex.args)
+                    print(message)
+                    QMessageBox.information(None, "Error", "Error en la agregación")
+                    conn.rollback()
+                    self.progress_changed(0)
+                    self.dlg.setEnabled(True)
+                    self.barraEstat_connectat()
+                    return
 
             QApplication.processEvents()
 
@@ -1134,6 +1431,8 @@ class Indicadors_Habitatge:
 
         self.correctHabitantsHabitatge(vlayer_resultat)
 
+        #QgsProject.instance().addMapLayer(vlayer_resultat).setName("Resultat abans de mostraLayerPerPantalla")
+
         self.mostraLayerPerPantalla(vlayer_resultat)
         if vlayer is not None:
             QgsProject.instance().removeMapLayers([vlayer.id()])
@@ -1144,6 +1443,7 @@ class Indicadors_Habitatge:
         drop += 'DROP TABLE IF EXISTS "tr_temp' + Fitxer + '";\n'
         drop += 'DROP TABLE IF EXISTS habitatge' + Fitxer + ';\n'
         drop += 'DROP TABLE IF EXISTS mapa_alcades' + Fitxer + ';\n'
+        drop += 'DROP TABLE IF EXISTS parcel_temp;\n'
         try:
             cur.execute(drop)
             conn.commit()
@@ -1162,25 +1462,61 @@ class Indicadors_Habitatge:
         self.dlg.setEnabled(True)
 
     def agregacionIlles(self, Fitxer, indicador, uri):
+        # He creat parcel_zone a la nova refactored per tenir-la ja creada
         if indicador == 'DensitatHabitantsHabitatge':
-            uri.setDataSource("", """(SELECT "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I", 
-                                        SUM(hab."Habitants"::INTEGER) AS "Habitants", SUM(hab."SupCons"::INTEGER) AS "SupCons"
-                                        FROM "ILLES" JOIN "parcel_illes" ON ("ILLES"."D_S_I" = "parcel_illes"."D_S_I") 
-                                        JOIN habitatge""" + Fitxer + """ AS hab ON ("parcel_illes"."UTM" = hab."UTM")
-                                        WHERE "ILLES"."D_S_I" NOT LIKE ''
-                                        GROUP BY "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I")""",
-                              "geom", "", "id")
-            vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
+            f"""
+            (
+                SELECT
+                    zone.id_zone,
+                    zone.geom,
+                    zone.cadastral_zoning_reference,
+                    SUM(hab."Habitants"::INTEGER) AS "Habitants",
+                    SUM(hab."SupCons"::INTEGER) AS "SupCons"
+                FROM
+                    zone
+                    JOIN parcel_zone
+                        ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                    JOIN habitatge{Fitxer} AS hab
+                        ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                WHERE
+                    zone.cadastral_zoning_reference NOT LIKE ''
+                GROUP BY
+                    zone.id_zone,
+                    zone.geom,
+                    zone.cadastral_zoning_reference
+            )
+            """
+            query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."Habitants"::INTEGER) AS "Habitants", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+            uri.setDataSource("", query, "geom", "", "id_zone")
+            vlayer_resultat = QgsVectorLayer(uri.uri(), "Resum", "postgres")
             vlayer_resultat = self.comprobarValidez(vlayer_resultat)
         elif indicador == "FinquesAnyConstruccio":
             if self.dlg.mitjanaRadioButton.isChecked():
-                uri.setDataSource("", """(SELECT "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I", 
-                                                SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons"
-                                                FROM "ILLES" JOIN "parcel_illes" ON ("ILLES"."D_S_I" = "parcel_illes"."D_S_I") 
-                                                JOIN habitatge""" + Fitxer + """ AS hab ON ("parcel_illes"."UTM" = hab."UTM")
-                                                WHERE "ILLES"."D_S_I" NOT LIKE ''
-                                                GROUP BY "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I")""",
-                                  "geom", "", "id")
+                f"""
+                (
+                    SELECT
+                        zone.id_zone,
+                        zone.geom,
+                        zone.cadastral_zoning_reference,
+                        SUM(hab."SCxAC"::INTEGER) AS "SCxAC",
+                        SUM(hab."SupCons"::INTEGER) AS "SupCons"
+                    FROM
+                        zone
+                        JOIN parcel_zone
+                            ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                        JOIN habitatge{Fitxer} AS hab
+                            ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                    WHERE
+                        zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%'
+                    GROUP BY
+                        zone.id_zone,
+                        zone.geom,
+                        zone.cadastral_zoning_reference
+                )
+                """
+                query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+
+                uri.setDataSource("", query, "geom", "", "id_zone")
                 vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
                 vlayer_resultat = self.comprobarValidez(vlayer_resultat)
 
@@ -1189,13 +1525,29 @@ class Indicadors_Habitatge:
                 vlayer_resultat = self.modaPonderadaIlles(Fitxer, uri)
 
         else:
-            uri.setDataSource("", """(SELECT "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I", 
+            f"""
+            (
+                SELECT
+                    zone.id_zone,
+                    zone.geom,
+                    zone.cadastral_zoning_reference,
                     SUM(hab."SupCons"::INTEGER) AS "SupCons"
-                    FROM "ILLES" JOIN "parcel_illes" ON ("ILLES"."D_S_I" = "parcel_illes"."D_S_I") 
-                    JOIN habitatge""" + Fitxer + """ AS hab ON ("parcel_illes"."UTM" = hab."UTM")
-                    WHERE "ILLES"."D_S_I" NOT LIKE ''
-                    GROUP BY "ILLES".id, "ILLES"."geom", "ILLES"."D_S_I")""",
-                              "geom", "", "id")
+                FROM
+                    zone
+                    JOIN parcel_zone
+                        ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                    JOIN habitatge{Fitxer} AS hab
+                        ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                WHERE
+                    zone.cadastral_zoning_reference NOT LIKE ''
+                GROUP BY
+                    zone.id_zone,
+                    zone.geom,
+                    zone.cadastral_zoning_reference
+            )
+            """
+            query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference) JOIN habitatge{Fitxer} AS hab ON (parcel_zone.cadastral_reference = hab.cadastral_reference) WHERE zone.cadastral_zoning_reference NOT LIKE '' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+            uri.setDataSource("", query, "geom", "", "id_zone")
             vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
         
         crs = vlayer_resultat.dataProvider().sourceCrs()
@@ -1208,10 +1560,29 @@ class Indicadors_Habitatge:
         return vlayer_resultat
 
     def modaPonderadaIlles(self, Fitxer, uri):
-        uri.setDataSource("", """(SELECT "hab".id, "hab"."UTM", "hab"."SupCons","hab"."Any_constr", "hab".geom, "ILLES".id AS id_agrupat
-                                                FROM "ILLES" JOIN "parcel_illes" ON ("ILLES"."D_S_I" = "parcel_illes"."D_S_I") 
-                                                JOIN habitatge""" + Fitxer + """ AS hab ON ("parcel_illes"."UTM" = hab."UTM"))""",
-                          "geom", "", "id")
+        f"""
+        (
+            SELECT
+                hab.id_parcel,
+                hab.cadastral_reference,
+                hab."SupCons",
+                hab.date_of_construction,
+                hab.geom,
+                zone.id_zone AS id_agrupat,
+                zone.cadastral_zoning_reference
+            FROM
+                zone
+                JOIN parcel_zone
+                    ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                JOIN habitatge{Fitxer} AS hab
+                    ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+            WHERE
+                zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%'
+        )
+        """
+        query = f"""(SELECT hab.id_parcel, hab.cadastral_reference, hab."SupCons", hab.date_of_construction, hab.geom, zone.id_zone AS id_agrupat, zone.cadastral_zoning_reference FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%')"""
+        uri.setDataSource("", query, "geom", "", "id_parcel")
+        ###uri.setDataSource("", query, "geom", "", "id_agrupat")
         vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
         vlayer_resultat = self.comprobarValidez(vlayer_resultat)
         self.progress_changed(70)
@@ -1219,82 +1590,109 @@ class Indicadors_Habitatge:
         vlayer_resultat.startEditing()
         features = vlayer_resultat.getFeatures()
         for feature in features:
-            if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
+            if (feature.attribute("SupCons") == None) or feature.attribute("date_of_construction") == None:
                 vlayer_resultat.deleteFeature(feature.id())
         vlayer_resultat.commitChanges()
+        print("procesoModaPonderada 1")
         vlayer_calculat = self.procesoModaPonderada(vlayer_resultat)
         QgsProject.instance().addMapLayer(vlayer_calculat, False)
-        uri.setDataSource("",
-                          "(SELECT * FROM \"ILLES\" WHERE \"D_S_I\" NOT LIKE '' AND \"D_S_I\" IS NOT NULL)",
-                          "geom", "", "id")
+        uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL AND zone.type LIKE '%MAN%')", "geom", "", "id_zone")
         entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
         entitatResum = self.comprobarValidez(entitatResum)
         QApplication.processEvents()
         QgsProject.instance().addMapLayer(entitatResum, False)
         self.progress_changed(75)
-        vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer_calculat.id(), "intersects",
-                                             "SupCons", 6,
-                                             "sum",
-                                             "modaPonderada2", "first_value")
+        vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer_calculat.id(), "intersects","SupCons", 6,"sum","modaPonderada2Atr", "first_value")
         self.progress_changed(80)
         QApplication.processEvents()
         QgsProject.instance().removeMapLayers([vlayer_calculat.id()])
         QgsProject.instance().removeMapLayers([entitatResum.id()])
         crs = vlayer_resultat.dataProvider().sourceCrs()
-        if str(vlayer_resultat.geometryType()) == "GeometryType.Polygon":
+        print(f"crs: {crs} crs.authid(): {crs.authid()}")
+        print(vlayer_resultat.geometryType())
+        if vlayer_resultat.geometryType() == QgsWkbTypes.PolygonGeometry:
             tipus = "Polygon"
-        elif str(vlayer_resultat.geometryType()) == "GeometryType.Point":
+        elif vlayer_resultat.geometryType() == QgsWkbTypes.PointGeometry:
             tipus = "Point"
-        elif str(vlayer_resultat.geometryType()) == "GeometryType.Line":
+        elif vlayer_resultat.geometryType() == QgsWkbTypes.LineGeometry:
             tipus = "LineString"
         else:
             tipus = "NoGeometry"
-        vlayer_resultat_temp = QgsVectorLayer(tipus, self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
+        print(f"tipus: {tipus}")
+        vlayer_resultat_temp = QgsVectorLayer(f"{tipus}?crs={crs.authid()}", self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
         vlayer_resultat_temp.setCrs(crs)
+
         vlayer_resultat_temp.dataProvider().addAttributes(vlayer_resultat.fields())
         vlayer_resultat_temp.updateFields()
-        vlayer_resultat_temp.dataProvider().addFeatures(vlayer_resultat.getFeatures())
+
+        for feat in vlayer_resultat.getFeatures():
+            #print(f"Feature: {feat.id()}, geometry: {feat.geometry()}")
+            new_geom = feat.geometry()
+            new_feat = QgsFeature()
+            new_feat.setGeometry(new_geom)
+            new_feat.setAttributes(feat.attributes())
+            vlayer_resultat_temp.dataProvider().addFeature(new_feat)
+
+        '''features = vlayer_resultat.getFeatures()
+        features_list = []
+        for feature in features:
+            new_feat = QgsFeature(feature)
+            if new_feat.hasGeometry():
+                features_list.append(new_feat)
+            else:
+                print(f"Warning: feature {feature.id()} has no geometry")
+        
+        vlayer_resultat_temp.dataProvider().addFeatures(features_list)
+
+        #vlayer_resultat_temp.dataProvider().addFeatures(vlayer_resultat.getFeatures())
+        '''
+        vlayer_resultat_temp.updateExtents()
         vlayer_resultat = self.comprobarValidez(vlayer_resultat_temp)
         return vlayer_resultat
 
     def agregacio(self, indicador, uri, vlayer):
         if self.dlg.Cmb_Metode.currentText() == "ILLES":
-            uri.setDataSource("", "(SELECT * FROM \"ILLES\" WHERE \"D_S_I\" NOT LIKE '' AND \"D_S_I\" IS NOT NULL)",
-                              "geom", "", "id")
+            uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL)", "geom", "", "id_zone")
         elif self.dlg.Cmb_Metode.currentText() == "PARCELES":
-            uri.setDataSource("", "(SELECT * FROM \"parcel\")", "geom", "", "id")
+            uri.setDataSource("", "(SELECT * FROM parcel_temp)", "geom", "", "id_parcel")
         elif self.dlg.Cmb_Metode.currentText() == "SECCIONS":
-            uri.setDataSource("", "(SELECT * FROM \"Seccions\")", "geom", "", "id")
+            uri.setDataSource("", "(SELECT * FROM seccions)", "geom", "", "id")
         elif self.dlg.Cmb_Metode.currentText() == "BARRIS":
-            uri.setDataSource("", "(SELECT * FROM \"Barris\")", "geom", "", "id")
+            uri.setDataSource("", "(SELECT * FROM barris)", "geom", "", "id")
         elif self.dlg.Cmb_Metode.currentText() == "DISTRICTES POSTALS":
-            uri.setDataSource("", "(SELECT * FROM \"DistrictesPostals\")", "geom", "", "id")
+            uri.setDataSource("", "(SELECT * FROM districtes_postals)", "geom", "", "id")
         elif self.dlg.Cmb_Metode.currentText() == "SECTORS":
-            uri.setDataSource("", "(SELECT * FROM \"Sectors\")", "geom", "", "id")
+            uri.setDataSource("", "(SELECT * FROM sectors)", "geom", "", "id")
         else:
-            uri.setDataSource("", "(SELECT * FROM \"Districtes\")", "geom", "", "id")
+            uri.setDataSource("", "(SELECT * FROM districtes)", "geom", "", "id")
         entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
         entitatResum = self.comprobarValidez(entitatResum)
         QApplication.processEvents()
-        QgsProject.instance().addMapLayer(entitatResum, False)
+        #QgsProject.instance().addMapLayer(entitatResum, False)
+        QgsProject.instance().addMapLayer(entitatResum).setName("entitatResum linia 1672")
         if indicador == "FinquesAnyConstruccio":
             if self.dlg.mitjanaRadioButton.isChecked():
-                vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum",
-                                                     indicador, "first_value")
+                vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum", indicador, "first_value")
                 vlayer_resultat = self.MediaPonderada(vlayer_resultat)
             else:
-                vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate",
-                                                     "modaPonderada", "first_value")
+                #if self.dlg.Cmb_Metode.currentText() == "ILLES":
+                #    vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id_zone", 4, "concatenate", "modaPonderada", "first_value")
+                #elif self.dlg.Cmb_Metode.currentText() == "PARCELES":
+                #    vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id_parcel", 4, "concatenate", "modaPonderada", "first_value")
+                #else:
+                #    vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate", "modaPonderada", "first_value")
+                vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate", "modaPonderada", "first_value")
                 self.progress_changed(70)
                 QApplication.processEvents()
 
                 vlayer_resultat.startEditing()
                 features = vlayer_resultat.getFeatures()
                 for feature in features:
-                    if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
+                    if (feature.attribute("SupCons") == None) or feature.attribute("date_of_construction") == None:
                         vlayer_resultat.deleteFeature(feature.id())
                 vlayer_resultat.commitChanges()
-
+                
+                print("procesoModaPonderada 2")
                 vlayer_calculat = self.procesoModaPonderada(vlayer_resultat)
 
                 QgsProject.instance().addMapLayer(vlayer_calculat, False)
@@ -1322,6 +1720,7 @@ class Indicadors_Habitatge:
         vlayer_resultat_temp.dataProvider().addAttributes(vlayer_resultat.fields())
         vlayer_resultat_temp.updateFields()
         vlayer_resultat_temp.dataProvider().addFeatures(vlayer_resultat.getFeatures())
+        vlayer_resultat_temp.updateExtents()
         vlayer_resultat = self.comprobarValidez(vlayer_resultat_temp)
         return vlayer_resultat
 
@@ -1400,7 +1799,7 @@ class Indicadors_Habitatge:
                                                          feature.attribute("Indicador") / media * 100)
 
     def correctHabitantsHabitatge(self, vlayer_resultat):
-        if self.getUnitats() == "hab/m^2 x 10000":
+        if self.getUnitats() == "hab/m² x 10000":
             vlayer_resultat.startEditing()
             features = vlayer_resultat.getFeatures()
             index = self.getIndexField(vlayer_resultat, "Indicador")
@@ -1415,11 +1814,12 @@ class Indicadors_Habitatge:
             if self.dlg.mitjanaRadioButton.isChecked():
                 vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "SCxAC"))
             features = vlayer_resultat.getFeatures()
-            index = self.getIndexField(vlayer_resultat, "Any_constr")
+            index = self.getIndexField(vlayer_resultat, "date_of_construction")
             for feature in features:
-                if (feature.attribute("SupCons") == None) or feature.attribute("Any_constr") == None:
+                #if (feature.attribute("SupCons") == None) or feature.attribute("date_of_construction") == None:
+                if (feature.attribute("SupCons") == None) or feature.attribute("date_of_construction") == None:
                     vlayer_resultat.deleteFeature(feature.id())
-                vlayer_resultat.changeAttributeValue(feature.id(), index, str(feature.attribute("Any_constr"))[:4])
+                vlayer_resultat.changeAttributeValue(feature.id(), index, str(feature.attribute("date_of_construction"))[:4])
             vlayer_resultat.commitChanges()
 
     def checkDuplexInMapaAlcades(self, indicador, vlayer_resultat):
@@ -1430,9 +1830,9 @@ class Indicadors_Habitatge:
             for feature in features:
                 if feature.attribute("SupCons") > float(feature.geometry().area()):
                     vlayer_resultat.changeAttributeValue(feature.id(), index, feature.attribute("Indicador") + 1)
-                if feature.attribute("Pis") == "AT":
+                if feature.attribute("floor") == "AT":
                     vlayer_resultat.changeAttributeValue(feature.id(), index, feature.attribute("Indicador") + 1)
-            vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "Pis"))
+            vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "floor"))
             vlayer_resultat.commitChanges()
 
     # Processing feedback
@@ -1569,7 +1969,39 @@ class Indicadors_Habitatge:
                                 'delimiter': ',',
                                 'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'max\',expression:=\"Any\", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')',
                                 'length': 0,
-                                'name': 'Any_constr',
+                                'name': 'date_of_construction',
+                                'precision': 0,
+                                'type': 2}],
+                'OUTPUT': sortida
+            }
+        elif indicador == "modaPonderada2Atr":
+            alg_params = {
+                # Entitat Resum
+                'INPUT': ILLES_UNIQUE['OUTPUT'],
+                'GROUP_BY': 'UUID',
+                'AGGREGATES': [{'aggregate': 'first_value',
+                                'delimiter': ';',
+                                'input': 'UUID',
+                                'length': 80,
+                                'name': 'UUID',
+                                'precision': 0,
+                                'type': 10
+                                },
+                               {'aggregate': aggregate,
+                                'delimiter': ';',
+                                #'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:="' + camp + '", filter:=' + operacion + '( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'' + operador + '\',expression:="' + camp + '", filter:="cadastral_zoning_reference"=attribute(@parent,\'cadastral_zoning_reference\'),concatenator:=\'-\')',
+                                'length': -1,
+                                'name': camp,
+                                'precision': -1,
+                                'type': tipus
+                                },
+                               {'aggregate': 'first_value',
+                                'delimiter': ',',
+                                #'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'max\',expression:=\"Any\", filter:=intersects( $geometry , geometry( @parent)),concatenator:=\'-\')',
+                                'input': 'aggregate(layer:=\'' + Entitat_Detall + '\', aggregate:=\'max\',expression:=\"Any\", filter:="cadastral_zoning_reference"=attribute(@parent,\'cadastral_zoning_reference\'),concatenator:=\'-\')',
+                                'length': 0,
+                                'name': 'date_of_construction',
                                 'precision': 0,
                                 'type': 2}],
                 'OUTPUT': sortida
@@ -1624,13 +2056,13 @@ class Indicadors_Habitatge:
                 'PREFIX': '',
                 'OUTPUT': sortida
             }
-        elif indicador == 'modaPonderada2':
+        elif indicador == 'modaPonderada2' or indicador == 'modaPonderada2Atr':
             alg = {
                 'INPUT': ILLES_UNIQUE['OUTPUT'],
                 'FIELD': 'UUID',
                 'INPUT_2': pep['OUTPUT'],
                 'FIELD_2': 'UUID',
-                'FIELDS_TO_COPY': [camp, "Any_constr"],
+                'FIELDS_TO_COPY': [camp, "date_of_construction"],
                 'METHOD': 1,
                 'DISCARD_NONMATCHING': False,
                 'PREFIX': '',
