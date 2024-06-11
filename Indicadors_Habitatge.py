@@ -412,7 +412,7 @@ class Indicadors_Habitatge:
             try:
                 cur.execute(f"""
                             DROP TABLE IF EXISTS "parcel_temp";
-                            CREATE TABLE "parcel_temp" AS
+                            CREATE TABLE "parcel_temp" (
                                 id_parcel,
                                 geom,
                                 cadastral_reference
@@ -442,10 +442,9 @@ class Indicadors_Habitatge:
                             DROP TABLE IF EXISTS "building";
                             CREATE LOCAL TEMP TABLE "building" (
                                 id_building,
-                                geom,
                                 cadastral_reference,
                                 current_use
-                            ) AS SELECT "id", "geom", "Ref_Cadastral", "Us" FROM "FinquesUS";
+                            ) AS SELECT "id", "Ref_Cadastral", "Us" FROM "FinquesUS";
                             """)
                 conn.commit()
                 cur.execute(f"""
