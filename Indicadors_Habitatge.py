@@ -22,67 +22,43 @@
  ***************************************************************************/
 """
 
-import sys
+import datetime
 import os
-import processing
+import os.path
+import sys
+import time
+import unicodedata
+from itertools import dropwhile
 from os.path import expanduser
+
+import processing
+import psycopg2
+import qgis.utils
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
-from PyQt5.QtWidgets import QAction, QMessageBox, QTableWidgetItem, QApplication, QToolBar, QColorDialog, QFileDialog
-from qgis.core import QgsMapLayer
-from qgis.core import QgsDataSourceUri
-from qgis.core import QgsVectorLayer
-from qgis.core import QgsFeatureRequest
-from qgis.core import QgsField
-from qgis.core import QgsPoint
-from qgis.core import QgsPointXY
-from qgis.core import QgsFeatureRenderer
-from qgis.core import QgsVectorFileWriter
-from qgis.core import QgsGraduatedSymbolRenderer
-from qgis.core import QgsCategorizedSymbolRenderer
-from qgis.core import QgsGradientColorRamp
-from qgis.core import QgsProject
-from qgis.core import QgsRendererRange
-from qgis.core import QgsSymbol
-from qgis.core import QgsFillSymbol
-from qgis.core import QgsLineSymbol
-from qgis.core import QgsSymbolLayerRegistry
-from qgis.core import QgsRandomColorRamp
-from qgis.core import QgsRendererRangeLabelFormat
-from qgis.core import QgsProject
-from qgis.core import QgsLayerTreeLayer
-from qgis.core import QgsRenderContext
-from qgis.core import QgsPalLayerSettings
-from qgis.core import QgsTextFormat
-from qgis.core import QgsTextBufferSettings
-from qgis.core import QgsVectorLayerSimpleLabeling
-from qgis.core import QgsWkbTypes
-from qgis.core import QgsVectorLayerExporter
-from qgis.core import QgsProcessingFeedback
-from qgis.core import QgsFeature
-from qgis.core import Qgis
-import psycopg2
-import unicodedata
-import datetime
-import time
-import qgis.utils
-from qgis.utils import iface
 from PyQt5.QtSql import *
-import datetime
-import time
+from PyQt5.QtWidgets import (QAction, QApplication, QColorDialog, QFileDialog,
+                             QMessageBox, QTableWidgetItem, QToolBar)
+from qgis.core import (Qgis, QgsDataSourceUri, QgsFeature, QgsField,
+                       QgsFillSymbol, QgsGradientColorRamp,
+                       QgsGraduatedSymbolRenderer, QgsLayerTreeLayer,
+                       QgsMapLayer, QgsPalLayerSettings, QgsProcessingFeedback,
+                       QgsProject, QgsRenderContext,
+                       QgsRendererRangeLabelFormat, QgsTextFormat,
+                       QgsVectorLayer, QgsVectorLayerSimpleLabeling,
+                       QgsWkbTypes)
+from qgis.utils import iface
 
-# Initialize Qt resources from file resources.py
-from .resources import *
 # Import the code for the dialog
 from .Indicadors_Habitatge_dialog import Indicadors_HabitatgeDialog
-import os.path
-from itertools import dropwhile
+# Initialize Qt resources from file resources.py
+from .resources import *
 
 """
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.240611"
+Versio_modul = "V_Q3.240701"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -94,9 +70,7 @@ versio_db = ""
 cur = None
 conn = None
 Path_Inicial = expanduser("~")
-#Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE", "SECTORS"]
 Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE"]
-#Llista_Camps_Metodes = ["ILLES", "parcel", "Seccions", "Barris", "DistrictesPostals", "Districtes", "Sectors"]
 Llista_Camps_Metodes = ["zone", "parcel_temp", "seccions", "barris", "districtes_postals", "districtes"]
 
 class Indicadors_Habitatge:
@@ -257,9 +231,7 @@ class Indicadors_Habitatge:
             parent=self.iface.mainWindow())
 
     def on_click_Sortir(self):
-        '''
-        Tanca la finestra del plugin 
-        '''
+        """Tanca la finestra del plugin"""
         self.estatInicial()
         self.dlg.close()
 
@@ -363,7 +335,7 @@ class Indicadors_Habitatge:
             try:
                 estructura = "dbname='" + nomBD.decode("utf-8") + "' user='" + usuari.decode(
                     "utf-8") + "' host='" + servidor.decode("utf-8") + "' password='" + contrasenya.decode(
-                    "utf-8") + "'"  # schema='"+schema+"'"
+                    "utf-8") + "'"
                 conn = psycopg2.connect(estructura)
                 self.barraEstat_connectat()
                 cur = conn.cursor()
@@ -400,6 +372,7 @@ class Indicadors_Habitatge:
             self.barraEstat_noConnectat()
 
     def detect_database_version(self):
+        """Realitza una consulta a una taula de la base de dades per detectar la versió de la base de dades: 1.0 si és el format clàssic, 2.0 si és el format refactored"""
         global cur
         global conn
         global versio_db
@@ -416,12 +389,12 @@ class Indicadors_Habitatge:
                                 id_parcel,
                                 geom,
                                 cadastral_reference
-                            ) AS SELECT "id", "geom", "utm_total" FROM parcel;
+                            ) AS SELECT "id", "geom", "UTM" FROM parcel;
                             """)
                 conn.commit()
                 cur.execute(f"""
                             DROP TABLE IF EXISTS "zone";
-                            CREATE LOCAL TEMP TABLE "zone" (
+                            CREATE TABLE "zone" (
                                 id_zone,
                                 geom,
                                 cadastral_zoning_reference
@@ -430,7 +403,7 @@ class Indicadors_Habitatge:
                 conn.commit()
                 cur.execute(f"""
                             DROP TABLE IF EXISTS "address";
-                            CREATE LOCAL TEMP TABLE "address" (
+                            CREATE TABLE "address" (
                                 id_address,
                                 geom,
                                 cadastral_reference,
@@ -440,22 +413,33 @@ class Indicadors_Habitatge:
                 conn.commit()
                 cur.execute(f"""
                             DROP TABLE IF EXISTS "building";
-                            CREATE LOCAL TEMP TABLE "building" (
+                            CREATE TABLE "building" (
                                 id_building,
                                 cadastral_reference,
-                                current_use
-                            ) AS SELECT "id", "Ref_Cadastral", "Us" FROM "FinquesUS";
+                                current_use,
+                                date_of_construction
+                            ) AS SELECT fus."id", fus."UTM", fus."Us", fac."Any_constr" 
+                            FROM "FinquesUS" fus JOIN "FinquesAnyConstruccio" fac ON fus."id" = fac."id";
                             """)
                 conn.commit()
                 cur.execute(f"""
                             DROP TABLE IF EXISTS "building_floor";
-                            CREATE LOCAL TEMP TABLE "building_floor" (
+                            CREATE TABLE "building_floor" (
                                 id_floor,
                                 cadastral_reference,
                                 stairs,
                                 floor,
                                 built_surface
-                            ) AS SELECT "id", "Ref_Cadastral", "Escala", "Pis", "Superficie_cons" FROM "FinquesPlantes";
+                            ) AS SELECT "id", "UTM", "Escala", "Pis", "Superficie_cons" FROM "FinquesPlantes";
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "parcel_zone";
+                            CREATE TABLE "parcel_zone" (
+                                id,
+                                cadastral_reference,
+                                cadastral_zoning_reference
+                            ) AS SELECT "id", "UTM", "D_S_I" FROM "parcel_illes";
                             """)
                 conn.commit()
             except Exception as ex:
@@ -489,6 +473,7 @@ class Indicadors_Habitatge:
                 raise Exception("Versió de la base de dades no reconeguda")
 
     def Comprova_Metodes(self, llista_noms, llista_camps, cur):
+        """Aquesta funció comprova quins mètodes (taules) estan disponibles a la base de dades i els retorna"""
         resultat = []
 
         resultat_tooltip = []
@@ -566,7 +551,6 @@ class Indicadors_Habitatge:
         global aux
         global Versio_modul
         global itemSel
-        global lbl_Cost
         aux = False
         itemSel = None
         self.barraEstat_noConnectat()
@@ -608,6 +592,7 @@ class Indicadors_Habitatge:
         self.SetTooltipIndicadors()
 
     def SetTooltipIndicadors(self):
+        """Aquesta funció estableix els tooltips dels indicadors per a que l'usuari pugui veure una descripció de cadascun d'ells"""
         self.dlg.comboIndicador.setItemData(1, "Sup. construïda amb ús d'habitatge/nombre d'habitants",
                                             QtCore.Qt.ToolTipRole)
         self.dlg.comboIndicador.setItemData(2, "Sup. construïda amb ús d'habitatge/Sup. geomètrica (solar)",
@@ -720,6 +705,7 @@ class Indicadors_Habitatge:
         return errors
 
     def getIndicador(self, fitxer):
+        """Aquesta funció retorna la consulta SQL que s'ha de fer per obtenir les dades de l'indicador seleccionat de la primera pestanya del plugin"""
         currentComboText = self.dlg.comboIndicador.currentText()
         if currentComboText == 'DensitatHabitantsHabitatge':
             return  f'''
@@ -739,7 +725,6 @@ class Indicadors_Habitatge:
                         building_floor.built_surface IS NOT NULL
                     '''
         elif currentComboText == 'DensitatHabitatgeÀrea':
-            # TODO: Revisar que les JOIN estiguin ben fetes, la JOIN de la building_floor abans no hi era però ara és necessari perquè els camps de les taules han canviat
             return  f'''
                     SELECT DISTINCT ON (parcel_temp.id_parcel)
                         parcel_temp.id_parcel,
@@ -752,7 +737,7 @@ class Indicadors_Habitatge:
                         LEFT JOIN (
                             SELECT *
                             FROM building
-                            WHERE current_use LIKE '1_residential'
+                            WHERE current_use LIKE '1_residential' OR current_use LIKE 'V'
                         ) AS edif
                             ON parcel_temp.cadastral_reference = edif.cadastral_reference
                         LEFT JOIN building_floor
@@ -795,12 +780,12 @@ class Indicadors_Habitatge:
                         LEFT JOIN (
                             SELECT *
                             FROM building_floor
-                            WHERE floor IN ('0', '00', 'BX', 'BJ', 'OD', '0P', '0A')
+                            WHERE floor IN ('0', '00', 'BX', 'BJ', 'OD', '0P', '0A', 'OP', 'OA')
                                 OR (floor LIKE 'UE' AND stairs LIKE 'S')
                         ) AS building_floor
                         ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
                     WHERE
-                        building_floor.built_surface IS NOT NULL AND building_floor.built_surface != 0
+                        building_floor.built_surface IS NOT NULL AND building_floor.built_surface::INTEGER != 0
                     GROUP BY
                         parcel_temp.geom,
                         parcel_temp.cadastral_reference,
@@ -809,9 +794,38 @@ class Indicadors_Habitatge:
 
 
     def getIndicador2(self):
+        """Aquesta funció retorna la consulta SQL que s'ha de fer per obtenir les dades de l'indicador seleccionat de la segona pestanya del plugin"""
         currentComboText = self.dlg.comboIndicador_2.currentText()
         if currentComboText == 'FinquesAnyConstruccio':
-            # TODO: Revisar que l'SQL estigui bé perquè ja no tenim la taula FinquesAnyConstrucció, ara l'any es troba en format de Date a la taula building
+            if versio_db == "1.0":
+                return f'''
+                    SELECT
+                        ROW_NUMBER() OVER (
+                            ORDER BY parcel_temp.cadastral_reference
+                        ) AS "id_parcel",
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        SUM(building_floor.built_surface::INTEGER) AS "SupCons",
+                        b_year.date_of_construction,
+                        (SUM(building_floor.built_surface::INTEGER) * b_year.date_of_construction) AS "SCxAC"
+                    FROM
+                        parcel_temp
+                        LEFT JOIN building_floor
+                            ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
+                        LEFT JOIN (
+                            SELECT cadastral_reference, date_of_construction::INTEGER
+                            FROM building
+                            WHERE date_of_construction::INTEGER BETWEEN {str(int(self.dlg.any_inici.value()))} AND {str(int(self.dlg.any_fi.value()))}
+                            GROUP BY cadastral_reference, date_of_construction
+                        ) AS b_year
+                            ON parcel_temp.cadastral_reference = b_year.cadastral_reference
+                    WHERE
+                        building_floor.built_surface IS NOT NULL AND b_year.date_of_construction IS NOT NULL
+                    GROUP BY
+                        parcel_temp.geom,
+                        parcel_temp.cadastral_reference,
+                        b_year.date_of_construction
+                    '''
             return f'''
                     SELECT
                         ROW_NUMBER() OVER (
@@ -842,6 +856,7 @@ class Indicadors_Habitatge:
                     '''
 
     def getIndicador3(self):
+        """Aquesta funció retorna la consulta SQL que s'ha de fer per obtenir les dades de l'indicador seleccionat de la tercera pestanya del plugin"""
         currentComboText = self.dlg.comboIndicador_3.currentText()
         if currentComboText == 'MapaAlçadesParcel·la':
             return f'''
@@ -863,6 +878,7 @@ class Indicadors_Habitatge:
                     '''
 
     def getTableAlcades(self):
+        """Aquesta funció retorna la consulta SQL que s'ha de fer per obtenir les dades de la taula de les alçades de les parcel·les"""
         return f'''
                 SELECT
                     m.*,
@@ -932,6 +948,7 @@ class Indicadors_Habitatge:
                 '''
 
     def getUnitats(self):
+        """Aquesta funció retorna les unitats de l'indicador seleccionat"""
         if self.dlg.tabWidget.currentIndex() == 0:
             if (self.dlg.checkbox_media.isChecked()):
                 return "%"
@@ -968,6 +985,7 @@ class Indicadors_Habitatge:
         return ""
 
     def mostraLayerPerPantalla(self, vlayer):
+        """Aquesta funció mostra la capa per pantalla"""
         global nomBD1
         global contra1
         global host1
@@ -980,7 +998,6 @@ class Indicadors_Habitatge:
                 if self.dlg.tabWidget.currentIndex() != 2:
                     nomCapa = self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats()
                 else:
-                    # TODO: Preguntar al Josep o al Miquel què hauria de posar al nom de la capa, abans sortia Sel·lecciona mètode, per tant he escrit PARCELES com a placeholder
                     nomCapa = 'PARCELES'
                 vlayer_temp = QgsVectorLayer(f"Polygon?crs={crs.authid()}", nomCapa, "memory")
                 vlayer_temp.setCrs(crs)
@@ -1061,8 +1078,6 @@ class Indicadors_Habitatge:
                         layer_settings.fieldName = "to_string(round( \"Indicador\"," + str(
                             self.dlg.decimals.value()) + "))"
                     else:
-                        # layer_settings.fieldName = "to_string(round( \"Any_constr\"," + str(
-                        ### layer_settings.fieldName = "to_string(round( \"built_surface\"," + str(
                         layer_settings.fieldName = "to_string(round( \"date_of_construction\"," + str(
                             self.dlg.decimals.value()) + "))"
                     if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
@@ -1104,6 +1119,7 @@ class Indicadors_Habitatge:
                                     "Error mostrant el vlayer per pantalla.")
 
     def getIndexField(self, vlayer, fieldName):
+        """Aquesta funció retorna l'index d'un camp d'una capa vectorial"""
         fields = vlayer.fields()
         for x in range(len(fields)):
             if (fields[x].displayName() == fieldName):
@@ -1111,6 +1127,7 @@ class Indicadors_Habitatge:
         return -1
 
     def comprobarValidez(self, vlayer):
+        """Aquesta funció comprova la validesa de la capa vectorial"""
         parameters = {'ERROR_OUTPUT': 'memory:',
                       'INPUT_LAYER': vlayer,
                       'INVALID_OUTPUT': 'memory:',
@@ -1122,6 +1139,7 @@ class Indicadors_Habitatge:
         return result['VALID_OUTPUT']
 
     def procesoModaPonderada(self, vlayer):
+        """Aquesta funció calcula la moda ponderada de la capa vectorial que li passem per paràmetre"""
         f = QgsProcessingFeedback()
         if (Qgis.QGIS_VERSION_INT < 30600):
             sortida = 'memory:'
@@ -1133,7 +1151,56 @@ class Indicadors_Habitatge:
                       'OUTPUT': sortida,
                       'VALUES_FIELD_NAME': 'SupCons'}
         result = processing.run('qgis:statisticsbycategories', parameters)
-        print("Proceso moda ponderada 1")
+
+        parameters = {
+            'INPUT': result['OUTPUT'],
+            'GROUP_BY': 'id_agrupat',
+            'AGGREGATES': [{'aggregate': 'concatenate',
+                            'delimiter': '',
+                            'input': 'if(sum=maximum(sum,group_by:=id_agrupat),to_string(\"date_of_construction\"),\'\')',
+                            'length': -1,
+                            'name': 'Any',
+                            'precision': -1,
+                            'type': 10},
+                           {'aggregate': 'first_value',
+                            'delimiter': ',',
+                            'input': '\"id_agrupat\"',
+                            'length': 0,
+                            'name': 'id_agrupat',
+                            'precision': 0,
+                            'type': 10}],
+            'OUTPUT': sortida
+        }
+        result = processing.run('qgis:aggregate', parameters, feedback=f)
+
+        parameters = {
+            'INPUT': vlayer,
+            'INPUT_2': result['OUTPUT'],
+            'DISCARD_NONMATCHING': False,
+            'FIELD': 'id_agrupat',
+            'FIELDS_TO_COPY': ['Any'],
+            'FIELD_2': 'id_agrupat',
+            'METHOD': 1,
+            'PREFIX': '',
+            'OUTPUT': sortida
+        }
+        result = processing.run('native:joinattributestable', parameters, feedback=f)
+
+        return result['OUTPUT']
+    
+    def procesoModaPonderadaIlles(self, vlayer):
+        """Aquesta funció calcula la moda ponderada de la capa vectorial, illes, que li passem per paràmetre"""
+        f = QgsProcessingFeedback()
+        if (Qgis.QGIS_VERSION_INT < 30600):
+            sortida = 'memory:'
+        else:
+            sortida = 'TEMPORARY_OUTPUT'
+
+        parameters = {'CATEGORIES_FIELD_NAME': ['date_of_construction', 'id_agrupat'],
+                      'INPUT': vlayer,
+                      'OUTPUT': sortida,
+                      'VALUES_FIELD_NAME': 'SupCons'}
+        result = processing.run('qgis:statisticsbycategories', parameters)
 
         parameters = {
             'INPUT': result['OUTPUT'],
@@ -1155,7 +1222,6 @@ class Indicadors_Habitatge:
             'OUTPUT': sortida
         }
         result = processing.run('qgis:aggregate', parameters, feedback=f)
-        print("Proceso moda ponderada 2")
 
         parameters = {
             'INPUT': vlayer,
@@ -1169,11 +1235,11 @@ class Indicadors_Habitatge:
             'OUTPUT': sortida
         }
         result = processing.run('native:joinattributestable', parameters, feedback=f)
-        print("Proceso moda ponderada 3")
 
         return result['OUTPUT']
 
     def MediaPonderada(self, vlayer):
+        """Aquesta funció calcula la mitjana ponderada de la capa vectorial que li passem per paràmetre"""
         vlayer.startEditing()
         vlayer.addAttribute(QgsField('date_of_construction', QVariant.Int))
         vlayer.commitChanges()
@@ -1185,6 +1251,8 @@ class Indicadors_Habitatge:
         for feature in features:
             unitat = int(feature.attribute("SCxAC"))
             supCons = feature.attribute("SupCons")
+            if supCons is None:
+                supCons = 0
             if type(supCons) is QVariant:
                 supCons = supCons.Double
             else:
@@ -1362,17 +1430,18 @@ class Indicadors_Habitatge:
         else:
             titol = capa.encode('utf8', 'strict')
             vlayer = QgsVectorLayer(uri.uri(False), titol.decode('utf8'), "postgres")
-            if vlayer.isValid():
-                crs = vlayer.dataProvider().sourceCrs()
-                vlayer_temp = QgsVectorLayer(f"Polygon?crs={crs.authid()}", capa, "memory")
-                vlayer_temp.setCrs(crs)
-                vlayer_temp.dataProvider().addAttributes(vlayer.fields())
-                vlayer_temp.updateFields()
-                vlayer_temp.dataProvider().addFeatures(vlayer.getFeatures())
-                vlayer_temp.updateExtents()
-                vlayer = self.comprobarValidez(vlayer_temp)
-                QApplication.processEvents()
-                QgsProject.instance().addMapLayer(vlayer, False)
+            if not vlayer.isValid():
+                raise Exception("La capa no es válida.")
+            crs = vlayer.dataProvider().sourceCrs()
+            vlayer_temp = QgsVectorLayer(f"Polygon?crs={crs.authid()}", capa, "memory")
+            vlayer_temp.setCrs(crs)
+            vlayer_temp.dataProvider().addAttributes(vlayer.fields())
+            vlayer_temp.updateFields()
+            vlayer_temp.dataProvider().addFeatures(vlayer.getFeatures())
+            vlayer_temp.updateExtents()
+            vlayer = self.comprobarValidez(vlayer_temp)
+            QApplication.processEvents()
+            QgsProject.instance().addMapLayer(vlayer, False)
         QApplication.processEvents()
 
         self.progress_changed(20)
@@ -1430,8 +1499,6 @@ class Indicadors_Habitatge:
 
         self.correctHabitantsHabitatge(vlayer_resultat)
 
-        #QgsProject.instance().addMapLayer(vlayer_resultat).setName("Resultat abans de mostraLayerPerPantalla")
-
         self.mostraLayerPerPantalla(vlayer_resultat)
         if vlayer is not None:
             QgsProject.instance().removeMapLayers([vlayer.id()])
@@ -1443,6 +1510,12 @@ class Indicadors_Habitatge:
         drop += 'DROP TABLE IF EXISTS habitatge' + Fitxer + ';\n'
         drop += 'DROP TABLE IF EXISTS mapa_alcades' + Fitxer + ';\n'
         drop += 'DROP TABLE IF EXISTS parcel_temp;\n'
+        if versio_db == '1.0':
+            drop += "DROP TABLE IF EXISTS zone;\n"
+            drop += "DROP TABLE IF EXISTS address;\n"
+            drop += "DROP TABLE IF EXISTS building;\n"
+            drop += "DROP TABLE IF EXISTS building_floor;\n"
+            drop += "DROP TABLE IF EXISTS parcel_zone;\n"
         try:
             cur.execute(drop)
             conn.commit()
@@ -1461,7 +1534,7 @@ class Indicadors_Habitatge:
         self.dlg.setEnabled(True)
 
     def agregacionIlles(self, Fitxer, indicador, uri):
-        # He creat parcel_zone a la nova refactored per tenir-la ja creada
+        """Aquesta funció realitza l'agregació de les illes"""
         if indicador == 'DensitatHabitantsHabitatge':
             f"""
             (
@@ -1491,29 +1564,54 @@ class Indicadors_Habitatge:
             vlayer_resultat = self.comprobarValidez(vlayer_resultat)
         elif indicador == "FinquesAnyConstruccio":
             if self.dlg.mitjanaRadioButton.isChecked():
-                f"""
-                (
-                    SELECT
-                        zone.id_zone,
-                        zone.geom,
-                        zone.cadastral_zoning_reference,
-                        SUM(hab."SCxAC"::INTEGER) AS "SCxAC",
-                        SUM(hab."SupCons"::INTEGER) AS "SupCons"
-                    FROM
-                        zone
-                        JOIN parcel_zone
-                            ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
-                        JOIN habitatge{Fitxer} AS hab
-                            ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
-                    WHERE
-                        zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%'
-                    GROUP BY
-                        zone.id_zone,
-                        zone.geom,
-                        zone.cadastral_zoning_reference
-                )
-                """
-                query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+                if versio_db == '1.0':
+                    f"""
+                    (
+                        SELECT
+                            zone.id_zone,
+                            zone.geom,
+                            zone.cadastral_zoning_reference,
+                            SUM(hab."SCxAC"::INTEGER) AS "SCxAC",
+                            SUM(hab."SupCons"::INTEGER) AS "SupCons"
+                        FROM
+                            zone
+                            JOIN parcel_zone
+                                ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                            JOIN habitatge{Fitxer} AS hab
+                                ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                        WHERE
+                            zone.cadastral_zoning_reference NOT LIKE ''
+                        GROUP BY
+                            zone.id_zone,
+                            zone.geom,
+                            zone.cadastral_zoning_reference
+                    )
+                    """
+                    query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+                else:
+                    f"""
+                    (
+                        SELECT
+                            zone.id_zone,
+                            zone.geom,
+                            zone.cadastral_zoning_reference,
+                            SUM(hab."SCxAC"::INTEGER) AS "SCxAC",
+                            SUM(hab."SupCons"::INTEGER) AS "SupCons"
+                        FROM
+                            zone
+                            JOIN parcel_zone
+                                ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                            JOIN habitatge{Fitxer} AS hab
+                                ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                        WHERE
+                            zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%'
+                        GROUP BY
+                            zone.id_zone,
+                            zone.geom,
+                            zone.cadastral_zoning_reference
+                    )
+                    """
+                    query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
 
                 uri.setDataSource("", query, "geom", "", "id_zone")
                 vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
@@ -1559,27 +1657,51 @@ class Indicadors_Habitatge:
         return vlayer_resultat
 
     def modaPonderadaIlles(self, Fitxer, uri):
-        f"""
-        (
-            SELECT
-                hab.id_parcel,
-                hab.cadastral_reference,
-                hab."SupCons",
-                hab.date_of_construction,
-                hab.geom,
-                zone.id_zone AS id_agrupat,
-                zone.cadastral_zoning_reference
-            FROM
-                zone
-                JOIN parcel_zone
-                    ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
-                JOIN habitatge{Fitxer} AS hab
-                    ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
-            WHERE
-                zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%'
-        )
-        """
-        query = f"""(SELECT hab.id_parcel, hab.cadastral_reference, hab."SupCons", hab.date_of_construction, hab.geom, zone.id_zone AS id_agrupat, zone.cadastral_zoning_reference FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%')"""
+        """Aquesta funció calcula la moda ponderada de les illes"""
+        if versio_db == '1.0':
+            f"""
+            (
+                SELECT DISTINCT ON (hab.id_parcel)
+                    hab.id_parcel,
+                    hab.cadastral_reference,
+                    hab."SupCons",
+                    hab.date_of_construction,
+                    hab.geom,
+                    zone.id_zone AS id_agrupat,
+                    zone.cadastral_zoning_reference
+                FROM
+                    zone
+                    JOIN parcel_zone
+                        ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                    JOIN habitatge{Fitxer} AS hab
+                        ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                WHERE
+                    zone.cadastral_zoning_reference NOT LIKE ''
+            )
+            """
+            query = f"""(SELECT DISTINCT ON (hab.id_parcel) hab.id_parcel, hab.cadastral_reference, hab."SupCons", hab.date_of_construction, hab.geom, zone.id_zone AS id_agrupat, zone.cadastral_zoning_reference FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '')"""
+        else:
+            f"""
+            (
+                SELECT
+                    hab.id_parcel,
+                    hab.cadastral_reference,
+                    hab."SupCons",
+                    hab.date_of_construction,
+                    hab.geom,
+                    zone.id_zone AS id_agrupat,
+                    zone.cadastral_zoning_reference
+                FROM
+                    zone
+                    JOIN parcel_zone
+                        ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                    JOIN habitatge{Fitxer} AS hab
+                        ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                WHERE
+                    zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%'
+            )
+            """
+            query = f"""(SELECT hab.id_parcel, hab.cadastral_reference, hab."SupCons", hab.date_of_construction, hab.geom, zone.id_zone AS id_agrupat, zone.cadastral_zoning_reference FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%')"""
         uri.setDataSource("", query, "geom", "", "id_parcel")
         ###uri.setDataSource("", query, "geom", "", "id_agrupat")
         vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
@@ -1592,10 +1714,12 @@ class Indicadors_Habitatge:
             if (feature.attribute("SupCons") == None) or feature.attribute("date_of_construction") == None:
                 vlayer_resultat.deleteFeature(feature.id())
         vlayer_resultat.commitChanges()
-        print("procesoModaPonderada 1")
-        vlayer_calculat = self.procesoModaPonderada(vlayer_resultat)
+        vlayer_calculat = self.procesoModaPonderadaIlles(vlayer_resultat)
         QgsProject.instance().addMapLayer(vlayer_calculat, False)
-        uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL AND zone.type LIKE '%MAN%')", "geom", "", "id_zone")
+        if versio_db == '1.0':
+            uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL)", "geom", "", "id_zone")
+        else:
+            uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL AND zone.type LIKE '%MAN%')", "geom", "", "id_zone")
         entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
         entitatResum = self.comprobarValidez(entitatResum)
         QApplication.processEvents()
@@ -1607,25 +1731,13 @@ class Indicadors_Habitatge:
         QgsProject.instance().removeMapLayers([vlayer_calculat.id()])
         QgsProject.instance().removeMapLayers([entitatResum.id()])
         crs = vlayer_resultat.dataProvider().sourceCrs()
-        print(f"crs: {crs} crs.authid(): {crs.authid()}")
-        print(vlayer_resultat.geometryType())
-        if vlayer_resultat.geometryType() == QgsWkbTypes.PolygonGeometry:
-            tipus = "Polygon"
-        elif vlayer_resultat.geometryType() == QgsWkbTypes.PointGeometry:
-            tipus = "Point"
-        elif vlayer_resultat.geometryType() == QgsWkbTypes.LineGeometry:
-            tipus = "LineString"
-        else:
-            tipus = "NoGeometry"
-        print(f"tipus: {tipus}")
-        vlayer_resultat_temp = QgsVectorLayer(f"{tipus}?crs={crs.authid()}", self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
+        vlayer_resultat_temp = QgsVectorLayer(f"Polygon?crs={crs.authid()}", self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
         vlayer_resultat_temp.setCrs(crs)
 
         vlayer_resultat_temp.dataProvider().addAttributes(vlayer_resultat.fields())
         vlayer_resultat_temp.updateFields()
 
         for feat in vlayer_resultat.getFeatures():
-            #print(f"Feature: {feat.id()}, geometry: {feat.geometry()}")
             new_geom = feat.geometry()
             new_feat = QgsFeature()
             new_feat.setGeometry(new_geom)
@@ -1650,6 +1762,7 @@ class Indicadors_Habitatge:
         return vlayer_resultat
 
     def agregacio(self, indicador, uri, vlayer):
+        """Aquesta funció realitza l'agregació de les entitats"""
         if self.dlg.Cmb_Metode.currentText() == "ILLES":
             uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL)", "geom", "", "id_zone")
         elif self.dlg.Cmb_Metode.currentText() == "PARCELES":
@@ -1667,20 +1780,13 @@ class Indicadors_Habitatge:
         entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
         entitatResum = self.comprobarValidez(entitatResum)
         QApplication.processEvents()
-        #QgsProject.instance().addMapLayer(entitatResum, False)
-        QgsProject.instance().addMapLayer(entitatResum).setName("entitatResum linia 1672")
+        QgsProject.instance().addMapLayer(entitatResum, False)
         if indicador == "FinquesAnyConstruccio":
             if self.dlg.mitjanaRadioButton.isChecked():
                 vlayer_resultat = self.AgregacioQGIS(entitatResum, vlayer.id(), "intersects", "SupCons", 6, "sum", indicador, "first_value")
                 vlayer_resultat = self.MediaPonderada(vlayer_resultat)
             else:
-                #if self.dlg.Cmb_Metode.currentText() == "ILLES":
-                #    vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id_zone", 4, "concatenate", "modaPonderada", "first_value")
-                #elif self.dlg.Cmb_Metode.currentText() == "PARCELES":
-                #    vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id_parcel", 4, "concatenate", "modaPonderada", "first_value")
-                #else:
-                #    vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate", "modaPonderada", "first_value")
-                vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id", 4, "concatenate", "modaPonderada", "first_value")
+                vlayer_resultat = self.AgregacioQGIS(vlayer, entitatResum.id(), "intersects", "id", 10, "concatenate", "modaPonderada", "first_value")
                 self.progress_changed(70)
                 QApplication.processEvents()
 
@@ -1706,15 +1812,7 @@ class Indicadors_Habitatge:
         QApplication.processEvents()
         QgsProject.instance().removeMapLayers([entitatResum.id()])
         crs = vlayer_resultat.dataProvider().sourceCrs()
-        if str(vlayer_resultat.geometryType()) == "GeometryType.Polygon":
-            tipus = "Polygon"
-        elif str(vlayer_resultat.geometryType()) == "GeometryType.Point":
-            tipus = "Point"
-        elif str(vlayer_resultat.geometryType()) == "GeometryType.Line":
-            tipus = "LineString"
-        else:
-            tipus = "NoGeometry"
-        vlayer_resultat_temp = QgsVectorLayer(tipus, self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
+        vlayer_resultat_temp = QgsVectorLayer(f"Polygon?crs={crs.authid()}", self.dlg.Cmb_Metode.currentText() + " " + self.getUnitats(), "memory")
         vlayer_resultat_temp.setCrs(crs)
         vlayer_resultat_temp.dataProvider().addAttributes(vlayer_resultat.fields())
         vlayer_resultat_temp.updateFields()
@@ -1724,6 +1822,7 @@ class Indicadors_Habitatge:
         return vlayer_resultat
 
     def calculateIndicador(self, vlayer_resultat):
+        """Aquesta funció calcula l'indicador"""
         vlayer_resultat.startEditing()
         features = vlayer_resultat.getFeatures()
         index = self.getIndexField(vlayer_resultat, "Indicador")
@@ -1732,9 +1831,7 @@ class Indicadors_Habitatge:
         for feature in features:
             if feature.attribute("SupCons") is None:
                 vlayer_resultat.deleteFeature(feature.id())
-                continue
-            
-            
+                continue           
 
             if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
                 habitants = feature.attribute("Habitants")
@@ -1777,6 +1874,7 @@ class Indicadors_Habitatge:
         vlayer_resultat.commitChanges()
 
     def calculateMedia(self, index, supConsTotal, unitatTotal, vlayer_resultat):
+        """Aquesta funció calcula la mitjana"""
         if self.dlg.checkbox_media.isChecked() and self.dlg.tabWidget.currentIndex() == 0:
             inverse = self.dlg.inverse_ratio.isChecked()
             if self.dlg.tabWidget.currentIndex() == 0 and self.dlg.comboIndicador.currentText() == 'DensitatHabitantsHabitatge':
@@ -1798,6 +1896,7 @@ class Indicadors_Habitatge:
                                                          feature.attribute("Indicador") / media * 100)
 
     def correctHabitantsHabitatge(self, vlayer_resultat):
+        """Aquesta funció corregix l'indicador DensitatHabitantsHabitatge"""
         if self.getUnitats() == "hab/m² x 10000":
             vlayer_resultat.startEditing()
             features = vlayer_resultat.getFeatures()
@@ -1808,6 +1907,7 @@ class Indicadors_Habitatge:
             vlayer_resultat.commitChanges()
 
     def cleanResultInFinquesAnyConstruccio(self, indicador, vlayer_resultat):
+        """Aquesta funció neteja el resultat de FinquesAnyConstruccio"""
         if indicador == "FinquesAnyConstruccio":
             vlayer_resultat.startEditing()
             if self.dlg.mitjanaRadioButton.isChecked():
@@ -1815,13 +1915,13 @@ class Indicadors_Habitatge:
             features = vlayer_resultat.getFeatures()
             index = self.getIndexField(vlayer_resultat, "date_of_construction")
             for feature in features:
-                #if (feature.attribute("SupCons") == None) or feature.attribute("date_of_construction") == None:
                 if (feature.attribute("SupCons") == None) or feature.attribute("date_of_construction") == None:
                     vlayer_resultat.deleteFeature(feature.id())
                 vlayer_resultat.changeAttributeValue(feature.id(), index, str(feature.attribute("date_of_construction"))[:4])
             vlayer_resultat.commitChanges()
 
     def checkDuplexInMapaAlcades(self, indicador, vlayer_resultat):
+        """Aquesta funció comprova els duplex en el MapaAlçades"""
         if indicador == "MapaAlçadesParcel·la":
             vlayer_resultat.startEditing()
             features = vlayer_resultat.getFeatures()
@@ -1834,12 +1934,13 @@ class Indicadors_Habitatge:
             vlayer_resultat.deleteAttribute(self.getIndexField(vlayer_resultat, "floor"))
             vlayer_resultat.commitChanges()
 
-    # Processing feedback
     def progress_changed(self, progress):
+        """Aquesta funció canvia el progrés de la barra de progrés segons el valor del paràmetre"""
         self.dlg.progressBar.setValue(progress)
 
     def AgregacioQGIS(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate, indicador,
                       aggregate):
+        """Aquesta funció realitza l'agregació de les entitats a partir del processing del QGIS"""
         f = QgsProcessingFeedback()
         f.progressChanged.connect(self.progress_changed)
         if (Qgis.QGIS_VERSION_INT < 30600):
@@ -1916,7 +2017,7 @@ class Indicadors_Habitatge:
                                 'length': 0,
                                 'name': 'SCxAC',
                                 'precision': 0,
-                                'type': 2}],
+                                'type': 4}],
                 'OUTPUT': sortida
             }
         elif indicador == "modaPonderada":
