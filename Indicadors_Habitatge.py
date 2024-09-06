@@ -25,28 +25,22 @@
 import datetime
 import os
 import os.path
-import sys
-import time
-import unicodedata
-from itertools import dropwhile
 from os.path import expanduser
 
 import processing
 import psycopg2
-import qgis.utils
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
 from PyQt5.QtSql import *
 from PyQt5.QtWidgets import (QAction, QApplication, QColorDialog, QFileDialog,
-                             QMessageBox, QTableWidgetItem, QToolBar)
+                             QMessageBox, QToolBar)
 from qgis.core import (Qgis, QgsDataSourceUri, QgsFeature, QgsField,
                        QgsFillSymbol, QgsGradientColorRamp,
                        QgsGraduatedSymbolRenderer, QgsLayerTreeLayer,
-                       QgsMapLayer, QgsPalLayerSettings, QgsProcessingFeedback,
+                       QgsPalLayerSettings, QgsProcessingFeedback,
                        QgsProject, QgsRenderContext,
                        QgsRendererRangeLabelFormat, QgsTextFormat,
-                       QgsVectorLayer, QgsVectorLayerSimpleLabeling,
-                       QgsWkbTypes)
+                       QgsVectorLayer, QgsVectorLayerSimpleLabeling)
 from qgis.utils import iface
 
 # Import the code for the dialog
@@ -58,7 +52,7 @@ from .resources import *
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.240701"
+Versio_modul = "V_Q3.240906"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -419,7 +413,7 @@ class Indicadors_Habitatge:
                                 current_use,
                                 date_of_construction
                             ) AS SELECT fus."id", fus."UTM", fus."Us", fac."Any_constr" 
-                            FROM "FinquesUS" fus JOIN "FinquesAnyConstruccio" fac ON fus."id" = fac."id";
+                            FROM "FinquesUS" fus JOIN "FinquesAnyConstruccio" fac ON fus."Ref_Cadastral" = fac."Ref_Cadastral";
                             """)
                 conn.commit()
                 cur.execute(f"""
@@ -813,10 +807,10 @@ class Indicadors_Habitatge:
                         LEFT JOIN building_floor
                             ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
                         LEFT JOIN (
-                            SELECT cadastral_reference, date_of_construction::INTEGER
+                            SELECT cadastral_reference, MAX(date_of_construction::INTEGER) AS "date_of_construction"
                             FROM building
-                            WHERE date_of_construction::INTEGER BETWEEN {str(int(self.dlg.any_inici.value()))} AND {str(int(self.dlg.any_fi.value()))}
-                            GROUP BY cadastral_reference, date_of_construction
+                            WHERE "date_of_construction"::INTEGER BETWEEN {str(int(self.dlg.any_inici.value()))} AND {str(int(self.dlg.any_fi.value()))}
+                            GROUP BY cadastral_reference
                         ) AS b_year
                             ON parcel_temp.cadastral_reference = b_year.cadastral_reference
                     WHERE
@@ -1241,7 +1235,7 @@ class Indicadors_Habitatge:
     def MediaPonderada(self, vlayer):
         """Aquesta funció calcula la mitjana ponderada de la capa vectorial que li passem per paràmetre"""
         vlayer.startEditing()
-        vlayer.addAttribute(QgsField('date_of_construction', QVariant.Int))
+        vlayer.addAttribute(QgsField('date_of_construction', QVariant.LongLong))
         vlayer.commitChanges()
         vlayer.updateFields()
 
@@ -2071,7 +2065,7 @@ class Indicadors_Habitatge:
                                 'length': 0,
                                 'name': 'date_of_construction',
                                 'precision': 0,
-                                'type': 2}],
+                                'type': 4}],
                 'OUTPUT': sortida
             }
         elif indicador == "modaPonderada2Atr":
@@ -2103,7 +2097,7 @@ class Indicadors_Habitatge:
                                 'length': 0,
                                 'name': 'date_of_construction',
                                 'precision': 0,
-                                'type': 2}],
+                                'type': 4}],
                 'OUTPUT': sortida
             }
         else:
