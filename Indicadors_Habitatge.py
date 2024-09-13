@@ -52,7 +52,7 @@ from .resources import *
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.240906"
+Versio_modul = "V_Q3.240913"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -65,7 +65,7 @@ cur = None
 conn = None
 Path_Inicial = expanduser("~")
 Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE"]
-Llista_Camps_Metodes = ["zone", "parcel_temp", "seccions", "barris", "districtes_postals", "districtes"]
+Llista_Camps_Metodes = [f"zone_{Fitxer}", f"parcel_temp_{Fitxer}", "seccions", "barris", "districtes_postals", "districtes"]
 
 class Indicadors_Habitatge:
     """QGIS Plugin Implementation."""
@@ -378,8 +378,8 @@ class Indicadors_Habitatge:
         if versio_db == '1.0':
             try:
                 cur.execute(f"""
-                            DROP TABLE IF EXISTS "parcel_temp";
-                            CREATE TABLE "parcel_temp" (
+                            DROP TABLE IF EXISTS "parcel_temp_{Fitxer}";
+                            CREATE TABLE "parcel_temp_{Fitxer}" (
                                 id_parcel,
                                 geom,
                                 cadastral_reference
@@ -387,8 +387,8 @@ class Indicadors_Habitatge:
                             """)
                 conn.commit()
                 cur.execute(f"""
-                            DROP TABLE IF EXISTS "zone";
-                            CREATE TABLE "zone" (
+                            DROP TABLE IF EXISTS "zone_{Fitxer}";
+                            CREATE TABLE "zone_{Fitxer}" (
                                 id_zone,
                                 geom,
                                 cadastral_zoning_reference
@@ -396,8 +396,8 @@ class Indicadors_Habitatge:
                             """)
                 conn.commit()
                 cur.execute(f"""
-                            DROP TABLE IF EXISTS "address";
-                            CREATE TABLE "address" (
+                            DROP TABLE IF EXISTS "address_{Fitxer}";
+                            CREATE TABLE "address_{Fitxer}" (
                                 id_address,
                                 geom,
                                 cadastral_reference,
@@ -406,8 +406,8 @@ class Indicadors_Habitatge:
                             """)
                 conn.commit()
                 cur.execute(f"""
-                            DROP TABLE IF EXISTS "building";
-                            CREATE TABLE "building" (
+                            DROP TABLE IF EXISTS "building_{Fitxer}";
+                            CREATE TABLE "building_{Fitxer}" (
                                 id_building,
                                 cadastral_reference,
                                 current_use,
@@ -417,8 +417,8 @@ class Indicadors_Habitatge:
                             """)
                 conn.commit()
                 cur.execute(f"""
-                            DROP TABLE IF EXISTS "building_floor";
-                            CREATE TABLE "building_floor" (
+                            DROP TABLE IF EXISTS "building_floor_{Fitxer}";
+                            CREATE TABLE "building_floor_{Fitxer}" (
                                 id_floor,
                                 cadastral_reference,
                                 stairs,
@@ -428,8 +428,8 @@ class Indicadors_Habitatge:
                             """)
                 conn.commit()
                 cur.execute(f"""
-                            DROP TABLE IF EXISTS "parcel_zone";
-                            CREATE TABLE "parcel_zone" (
+                            DROP TABLE IF EXISTS "parcel_zone_{Fitxer}";
+                            CREATE TABLE "parcel_zone_{Fitxer}" (
                                 id,
                                 cadastral_reference,
                                 cadastral_zoning_reference
@@ -449,8 +449,33 @@ class Indicadors_Habitatge:
         elif versio_db == '2.0':
             try:
                 cur.execute(f"""
-                            DROP TABLE IF EXISTS "parcel_temp";
-                            CREATE TABLE "parcel_temp" AS SELECT * FROM parcel;
+                            DROP TABLE IF EXISTS "parcel_temp_{Fitxer}";
+                            CREATE TABLE "parcel_temp_{Fitxer}" AS SELECT * FROM parcel;
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "zone_{Fitxer}";
+                            CREATE TABLE "zone_{Fitxer}" AS SELECT * FROM "zone";
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "address_{Fitxer}";
+                            CREATE TABLE "address_{Fitxer}" AS SELECT * FROM "address";
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "building_{Fitxer}";
+                            CREATE TABLE "building_{Fitxer}" AS SELECT * FROM "building";
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "building_floor_{Fitxer}";
+                            CREATE TABLE "building_floor_{Fitxer}" AS SELECT * FROM "building_floor";
+                            """)
+                conn.commit()
+                cur.execute(f"""
+                            DROP TABLE IF EXISTS "parcel_zone_{Fitxer}";
+                            CREATE TABLE "parcel_zone_{Fitxer}" AS SELECT * FROM "parcel_zone";
                             """)
                 conn.commit()
             except Exception as ex:
@@ -703,87 +728,87 @@ class Indicadors_Habitatge:
         currentComboText = self.dlg.comboIndicador.currentText()
         if currentComboText == 'DensitatHabitantsHabitatge':
             return  f'''
-                    SELECT DISTINCT ON (parcel_temp.id_parcel)
-                        parcel_temp.id_parcel,
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
-                        building_floor.built_surface AS "SupCons",
+                    SELECT DISTINCT ON (parcel_temp_{Fitxer}.id_parcel)
+                        parcel_temp_{Fitxer}.id_parcel,
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
+                        building_floor_{Fitxer}.built_surface AS "SupCons",
                         tr."Habitants"
                     FROM
-                        parcel_temp
+                        parcel_temp_{Fitxer}
                         LEFT JOIN tr_temp{fitxer} AS tr 
-                            ON parcel_temp.cadastral_reference = tr."Parcela" AND tr."Habitants" IS NOT NULL
-                        LEFT JOIN building_floor 
-                        ON parcel_temp.cadastral_reference = building_floor.cadastral_reference AND building_floor.built_surface IS NOT NULL
+                            ON parcel_temp_{Fitxer}.cadastral_reference = tr."Parcela" AND tr."Habitants" IS NOT NULL
+                        LEFT JOIN building_floor_{Fitxer} 
+                        ON parcel_temp_{Fitxer}.cadastral_reference = building_floor_{Fitxer}.cadastral_reference AND building_floor_{Fitxer}.built_surface IS NOT NULL
                     WHERE
-                        building_floor.built_surface IS NOT NULL
+                        building_floor_{Fitxer}.built_surface IS NOT NULL
                     '''
         elif currentComboText == 'DensitatHabitatgeÀrea':
             return  f'''
-                    SELECT DISTINCT ON (parcel_temp.id_parcel)
-                        parcel_temp.id_parcel,
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
-                        building_floor.built_surface AS "SupCons",
-                        ST_Area(parcel_temp.geom)
+                    SELECT DISTINCT ON (parcel_temp_{Fitxer}.id_parcel)
+                        parcel_temp_{Fitxer}.id_parcel,
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
+                        building_floor_{Fitxer}.built_surface AS "SupCons",
+                        ST_Area(parcel_temp_{Fitxer}.geom)
                     FROM
-                        parcel_temp
+                        parcel_temp_{Fitxer}
                         LEFT JOIN (
                             SELECT *
-                            FROM building
+                            FROM building_{Fitxer}
                             WHERE current_use LIKE '1_residential' OR current_use LIKE 'V'
                         ) AS edif
-                            ON parcel_temp.cadastral_reference = edif.cadastral_reference
-                        LEFT JOIN building_floor
-                            ON building_floor.cadastral_reference = edif.cadastral_reference
-                                AND building_floor.built_surface IS NOT NULL
+                            ON parcel_temp_{Fitxer}.cadastral_reference = edif.cadastral_reference
+                        LEFT JOIN building_floor_{Fitxer}
+                            ON building_floor_{Fitxer}.cadastral_reference = edif.cadastral_reference
+                                AND building_floor_{Fitxer}.built_surface IS NOT NULL
                     WHERE
-                        building_floor.built_surface IS NOT NULL
+                        building_floor_{Fitxer}.built_surface IS NOT NULL
                     '''
         elif currentComboText == 'DensitatEdificis':
             return f'''
                     SELECT
                         ROW_NUMBER() OVER (
-                            ORDER BY parcel_temp.cadastral_reference
+                            ORDER BY parcel_temp_{Fitxer}.cadastral_reference
                         ) AS "id_parcel",
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
-                        SUM(building_floor.built_surface::INTEGER) AS "SupCons"
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
+                        SUM(building_floor_{Fitxer}.built_surface::INTEGER) AS "SupCons"
                     FROM
-                        parcel_temp
-                        LEFT JOIN building_floor
-                            ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
+                        parcel_temp_{Fitxer}
+                        LEFT JOIN building_floor_{Fitxer}
+                            ON parcel_temp_{Fitxer}.cadastral_reference = building_floor_{Fitxer}.cadastral_reference
                     WHERE
-                        building_floor.built_surface IS NOT NULL
+                        building_floor_{Fitxer}.built_surface IS NOT NULL
                     GROUP BY
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference
                     '''
         elif currentComboText == 'DensitatPlanta0Area':
             return f'''
                     SELECT
                         ROW_NUMBER() OVER (
-                            ORDER BY parcel_temp.cadastral_reference
+                            ORDER BY parcel_temp_{Fitxer}.cadastral_reference
                         ) AS "id_parcel",
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
-                        SUM(building_floor.built_surface::INTEGER) AS "SupCons",
-                        building_floor.floor
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
+                        SUM(building_floor_{Fitxer}.built_surface::INTEGER) AS "SupCons",
+                        building_floor_{Fitxer}.floor
                     FROM
-                        parcel_temp
+                        parcel_temp_{Fitxer}
                         LEFT JOIN (
                             SELECT *
-                            FROM building_floor
+                            FROM building_floor_{Fitxer}
                             WHERE floor IN ('0', '00', 'BX', 'BJ', 'OD', '0P', '0A', 'OP', 'OA')
                                 OR (floor LIKE 'UE' AND stairs LIKE 'S')
-                        ) AS building_floor
-                        ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
+                        ) AS building_floor_{Fitxer}
+                        ON parcel_temp_{Fitxer}.cadastral_reference = building_floor_{Fitxer}.cadastral_reference
                     WHERE
-                        building_floor.built_surface IS NOT NULL AND building_floor.built_surface::INTEGER != 0
+                        building_floor_{Fitxer}.built_surface IS NOT NULL AND building_floor_{Fitxer}.built_surface::INTEGER != 0
                     GROUP BY
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
-                        building_floor.floor
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
+                        building_floor_{Fitxer}.floor
                     '''
 
 
@@ -795,57 +820,57 @@ class Indicadors_Habitatge:
                 return f'''
                     SELECT
                         ROW_NUMBER() OVER (
-                            ORDER BY parcel_temp.cadastral_reference
+                            ORDER BY parcel_temp_{Fitxer}.cadastral_reference
                         ) AS "id_parcel",
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
-                        SUM(building_floor.built_surface::INTEGER) AS "SupCons",
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
+                        SUM(building_floor_{Fitxer}.built_surface::INTEGER) AS "SupCons",
                         b_year.date_of_construction,
-                        (SUM(building_floor.built_surface::INTEGER) * b_year.date_of_construction) AS "SCxAC"
+                        (SUM(building_floor_{Fitxer}.built_surface::INTEGER) * b_year.date_of_construction) AS "SCxAC"
                     FROM
-                        parcel_temp
-                        LEFT JOIN building_floor
-                            ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
+                        parcel_temp_{Fitxer}
+                        LEFT JOIN building_floor_{Fitxer}
+                            ON parcel_temp_{Fitxer}.cadastral_reference = building_floor_{Fitxer}.cadastral_reference
                         LEFT JOIN (
                             SELECT cadastral_reference, MAX(date_of_construction::INTEGER) AS "date_of_construction"
-                            FROM building
+                            FROM building_{Fitxer}
                             WHERE "date_of_construction"::INTEGER BETWEEN {str(int(self.dlg.any_inici.value()))} AND {str(int(self.dlg.any_fi.value()))}
                             GROUP BY cadastral_reference
                         ) AS b_year
-                            ON parcel_temp.cadastral_reference = b_year.cadastral_reference
+                            ON parcel_temp_{Fitxer}.cadastral_reference = b_year.cadastral_reference
                     WHERE
-                        building_floor.built_surface IS NOT NULL AND b_year.date_of_construction IS NOT NULL
+                        building_floor_{Fitxer}.built_surface IS NOT NULL AND b_year.date_of_construction IS NOT NULL
                     GROUP BY
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
                         b_year.date_of_construction
                     '''
             return f'''
                     SELECT
                         ROW_NUMBER() OVER (
-                            ORDER BY parcel_temp.cadastral_reference
+                            ORDER BY parcel_temp_{Fitxer}.cadastral_reference
                         ) AS "id_parcel",
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
-                        SUM(building_floor.built_surface::INTEGER) AS "SupCons",
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
+                        SUM(building_floor_{Fitxer}.built_surface::INTEGER) AS "SupCons",
                         b_year.date_of_construction,
-                        (SUM(building_floor.built_surface::INTEGER) * b_year.date_of_construction) AS "SCxAC"
+                        (SUM(building_floor_{Fitxer}.built_surface::INTEGER) * b_year.date_of_construction) AS "SCxAC"
                     FROM
-                        parcel_temp
-                        LEFT JOIN building_floor
-                            ON parcel_temp.cadastral_reference = building_floor.cadastral_reference
+                        parcel_temp_{Fitxer}
+                        LEFT JOIN building_floor_{Fitxer}
+                            ON parcel_temp_{Fitxer}.cadastral_reference = building_floor_{Fitxer}.cadastral_reference
                         LEFT JOIN (
                             SELECT cadastral_reference, MAX(EXTRACT(YEAR FROM date_of_construction)::INTEGER)::INTEGER AS date_of_construction
-                            FROM building
+                            FROM building_{Fitxer}
                             WHERE EXTRACT(YEAR FROM date_of_construction) BETWEEN {str(int(self.dlg.any_inici.value()))} AND {str(int(self.dlg.any_fi.value()))}
                             GROUP BY cadastral_reference
                         ) AS b_year
-                            ON parcel_temp.cadastral_reference = b_year.cadastral_reference
+                            ON parcel_temp_{Fitxer}.cadastral_reference = b_year.cadastral_reference
                     WHERE
-                        building_floor.built_surface IS NOT NULL AND b_year.date_of_construction IS NOT NULL
+                        building_floor_{Fitxer}.built_surface IS NOT NULL AND b_year.date_of_construction IS NOT NULL
                     GROUP BY
-                        parcel_temp.geom,
-                        parcel_temp.cadastral_reference,
+                        parcel_temp_{Fitxer}.geom,
+                        parcel_temp_{Fitxer}.cadastral_reference,
                         b_year.date_of_construction
                     '''
 
@@ -881,10 +906,10 @@ class Indicadors_Habitatge:
                     (
                         SELECT
                             ROW_NUMBER() OVER (
-                                ORDER BY parcel_temp.id_parcel
+                                ORDER BY parcel_temp_{Fitxer}.id_parcel
                             ) AS "id_parcel",
-                            parcel_temp.geom,
-                            parcel_temp.cadastral_reference,
+                            parcel_temp_{Fitxer}.geom,
+                            parcel_temp_{Fitxer}.cadastral_reference,
                             (
                                 CASE
                                     WHEN alt."Indicador" != -1 THEN
@@ -894,7 +919,7 @@ class Indicadors_Habitatge:
                             ) AS "Indicador",
                             alt."SupCons"
                         FROM
-                            parcel_temp
+                            parcel_temp_{Fitxer}
                             LEFT JOIN (
                                 SELECT
                                     cadastral_reference,
@@ -915,7 +940,7 @@ class Indicadors_Habitatge:
                                     ) AS "Indicador",
                                     (built_surface::INTEGER) AS "SupCons"
                                 FROM
-                                    building_floor
+                                    building_floor_{Fitxer}
                                 WHERE
                                     floor ~ '^[0-9\.]+$'
                                     OR floor IN ('0', '00', 'BX', 'BJ', 'OD', 'OP', 'OA')
@@ -924,7 +949,7 @@ class Indicadors_Habitatge:
                                     cadastral_reference,
                                     built_surface
                             ) AS alt
-                                ON parcel_temp.cadastral_reference = alt.cadastral_reference
+                                ON parcel_temp_{Fitxer}.cadastral_reference = alt.cadastral_reference
                         WHERE
                             alt."Indicador" IS NOT NULL
                             AND alt."SupCons" != 0
@@ -934,7 +959,7 @@ class Indicadors_Habitatge:
                             cadastral_reference,
                             floor
                         FROM
-                            building_floor
+                            building_floor_{Fitxer}
                         WHERE
                             floor LIKE 'AT'
                     ) AS f
@@ -1503,13 +1528,12 @@ class Indicadors_Habitatge:
         drop += 'DROP TABLE IF EXISTS "tr_temp' + Fitxer + '";\n'
         drop += 'DROP TABLE IF EXISTS habitatge' + Fitxer + ';\n'
         drop += 'DROP TABLE IF EXISTS mapa_alcades' + Fitxer + ';\n'
-        drop += 'DROP TABLE IF EXISTS parcel_temp;\n'
-        if versio_db == '1.0':
-            drop += "DROP TABLE IF EXISTS zone;\n"
-            drop += "DROP TABLE IF EXISTS address;\n"
-            drop += "DROP TABLE IF EXISTS building;\n"
-            drop += "DROP TABLE IF EXISTS building_floor;\n"
-            drop += "DROP TABLE IF EXISTS parcel_zone;\n"
+        drop += f'DROP TABLE IF EXISTS parcel_temp_{Fitxer};\n'
+        drop += f"DROP TABLE IF EXISTS zone_{Fitxer};\n"
+        drop += f"DROP TABLE IF EXISTS address_{Fitxer};\n"
+        drop += f"DROP TABLE IF EXISTS building_{Fitxer};\n"
+        drop += f"DROP TABLE IF EXISTS building_floor_{Fitxer};\n"
+        drop += f"DROP TABLE IF EXISTS parcel_zone_{Fitxer};\n"
         try:
             cur.execute(drop)
             conn.commit()
@@ -1533,26 +1557,26 @@ class Indicadors_Habitatge:
             f"""
             (
                 SELECT
-                    zone.id_zone,
-                    zone.geom,
-                    zone.cadastral_zoning_reference,
+                    zone_{Fitxer}.id_zone,
+                    zone_{Fitxer}.geom,
+                    zone_{Fitxer}.cadastral_zoning_reference,
                     SUM(hab."Habitants"::INTEGER) AS "Habitants",
                     SUM(hab."SupCons"::INTEGER) AS "SupCons"
                 FROM
-                    zone
-                    JOIN parcel_zone
-                        ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                    zone_{Fitxer}
+                    JOIN parcel_zone_{Fitxer}
+                        ON (zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference)
                     JOIN habitatge{Fitxer} AS hab
-                        ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                        ON (parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference)
                 WHERE
-                    zone.cadastral_zoning_reference NOT LIKE ''
+                    zone_{Fitxer}.cadastral_zoning_reference NOT LIKE ''
                 GROUP BY
-                    zone.id_zone,
-                    zone.geom,
-                    zone.cadastral_zoning_reference
+                    zone_{Fitxer}.id_zone,
+                    zone_{Fitxer}.geom,
+                    zone_{Fitxer}.cadastral_zoning_reference
             )
             """
-            query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."Habitants"::INTEGER) AS "Habitants", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+            query = f"""(SELECT zone_{Fitxer}.id_zone, zone_{Fitxer}.geom, zone_{Fitxer}.cadastral_zoning_reference, SUM(hab."Habitants"::INTEGER) AS "Habitants", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone_{Fitxer} JOIN parcel_zone_{Fitxer} ON zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference WHERE zone_{Fitxer}.cadastral_zoning_reference NOT LIKE '' GROUP BY zone_{Fitxer}.id_zone, zone_{Fitxer}.geom, zone_{Fitxer}.cadastral_zoning_reference)"""
             uri.setDataSource("", query, "geom", "", "id_zone")
             vlayer_resultat = QgsVectorLayer(uri.uri(), "Resum", "postgres")
             vlayer_resultat = self.comprobarValidez(vlayer_resultat)
@@ -1562,50 +1586,50 @@ class Indicadors_Habitatge:
                     f"""
                     (
                         SELECT
-                            zone.id_zone,
-                            zone.geom,
-                            zone.cadastral_zoning_reference,
+                            zone_{Fitxer}.id_zone,
+                            zone_{Fitxer}.geom,
+                            zone_{Fitxer}.cadastral_zoning_reference,
                             SUM(hab."SCxAC"::INTEGER) AS "SCxAC",
                             SUM(hab."SupCons"::INTEGER) AS "SupCons"
                         FROM
-                            zone
-                            JOIN parcel_zone
-                                ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                            zone_{Fitxer}
+                            JOIN parcel_zone_{Fitxer}
+                                ON (zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference)
                             JOIN habitatge{Fitxer} AS hab
-                                ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                                ON (parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference)
                         WHERE
-                            zone.cadastral_zoning_reference NOT LIKE ''
+                            zone_{Fitxer}.cadastral_zoning_reference NOT LIKE ''
                         GROUP BY
-                            zone.id_zone,
-                            zone.geom,
-                            zone.cadastral_zoning_reference
+                            zone_{Fitxer}.id_zone,
+                            zone_{Fitxer}.geom,
+                            zone_{Fitxer}.cadastral_zoning_reference
                     )
                     """
-                    query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+                    query = f"""(SELECT zone_{Fitxer}.id_zone, zone_{Fitxer}.geom, zone_{Fitxer}.cadastral_zoning_reference, SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone_{Fitxer} JOIN parcel_zone_{Fitxer} ON zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference WHERE zone_{Fitxer}.cadastral_zoning_reference NOT LIKE '' GROUP BY zone_{Fitxer}.id_zone, zone_{Fitxer}.geom, zone_{Fitxer}.cadastral_zoning_reference)"""
                 else:
                     f"""
                     (
                         SELECT
-                            zone.id_zone,
-                            zone.geom,
-                            zone.cadastral_zoning_reference,
+                            zone_{Fitxer}.id_zone,
+                            zone_{Fitxer}.geom,
+                            zone_{Fitxer}.cadastral_zoning_reference,
                             SUM(hab."SCxAC"::INTEGER) AS "SCxAC",
                             SUM(hab."SupCons"::INTEGER) AS "SupCons"
                         FROM
-                            zone
-                            JOIN parcel_zone
-                                ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                            zone_{Fitxer}
+                            JOIN parcel_zone_{Fitxer}
+                                ON (zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference)
                             JOIN habitatge{Fitxer} AS hab
-                                ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                                ON (parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference)
                         WHERE
-                            zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%'
+                            zone_{Fitxer}.cadastral_zoning_reference NOT LIKE '' AND zone_{Fitxer}.type LIKE '%MAN%'
                         GROUP BY
-                            zone.id_zone,
-                            zone.geom,
-                            zone.cadastral_zoning_reference
+                            zone_{Fitxer}.id_zone,
+                            zone_{Fitxer}.geom,
+                            zone_{Fitxer}.cadastral_zoning_reference
                     )
                     """
-                    query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+                    query = f"""(SELECT zone_{Fitxer}.id_zone, zone_{Fitxer}.geom, zone_{Fitxer}.cadastral_zoning_reference, SUM(hab."SCxAC"::INTEGER) AS "SCxAC", SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone_{Fitxer} JOIN parcel_zone_{Fitxer} ON zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference WHERE zone_{Fitxer}.cadastral_zoning_reference NOT LIKE '' AND zone_{Fitxer}.type LIKE '%MAN%' GROUP BY zone_{Fitxer}.id_zone, zone_{Fitxer}.geom, zone_{Fitxer}.cadastral_zoning_reference)"""
 
                 uri.setDataSource("", query, "geom", "", "id_zone")
                 vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
@@ -1619,25 +1643,25 @@ class Indicadors_Habitatge:
             f"""
             (
                 SELECT
-                    zone.id_zone,
-                    zone.geom,
-                    zone.cadastral_zoning_reference,
+                    zone_{Fitxer}.id_zone,
+                    zone_{Fitxer}.geom,
+                    zone_{Fitxer}.cadastral_zoning_reference,
                     SUM(hab."SupCons"::INTEGER) AS "SupCons"
                 FROM
-                    zone
-                    JOIN parcel_zone
-                        ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                    zone_{Fitxer}
+                    JOIN parcel_zone_{Fitxer}
+                        ON (zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference)
                     JOIN habitatge{Fitxer} AS hab
-                        ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                        ON (parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference)
                 WHERE
-                    zone.cadastral_zoning_reference NOT LIKE ''
+                    zone_{Fitxer}.cadastral_zoning_reference NOT LIKE ''
                 GROUP BY
-                    zone.id_zone,
-                    zone.geom,
-                    zone.cadastral_zoning_reference
+                    zone_{Fitxer}.id_zone,
+                    zone_{Fitxer}.geom,
+                    zone_{Fitxer}.cadastral_zoning_reference
             )
             """
-            query = f"""(SELECT zone.id_zone, zone.geom, zone.cadastral_zoning_reference, SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone JOIN parcel_zone ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference) JOIN habitatge{Fitxer} AS hab ON (parcel_zone.cadastral_reference = hab.cadastral_reference) WHERE zone.cadastral_zoning_reference NOT LIKE '' GROUP BY zone.id_zone, zone.geom, zone.cadastral_zoning_reference)"""
+            query = f"""(SELECT zone_{Fitxer}.id_zone, zone_{Fitxer}.geom, zone_{Fitxer}.cadastral_zoning_reference, SUM(hab."SupCons"::INTEGER) AS "SupCons" FROM zone_{Fitxer} JOIN parcel_zone_{Fitxer} ON (zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference) JOIN habitatge{Fitxer} AS hab ON (parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference) WHERE zone_{Fitxer}.cadastral_zoning_reference NOT LIKE '' GROUP BY zone_{Fitxer}.id_zone, zone_{Fitxer}.geom, zone_{Fitxer}.cadastral_zoning_reference)"""
             uri.setDataSource("", query, "geom", "", "id_zone")
             vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
         
@@ -1661,19 +1685,19 @@ class Indicadors_Habitatge:
                     hab."SupCons",
                     hab.date_of_construction,
                     hab.geom,
-                    zone.id_zone AS id_agrupat,
-                    zone.cadastral_zoning_reference
+                    zone_{Fitxer}.id_zone AS id_agrupat,
+                    zone_{Fitxer}.cadastral_zoning_reference
                 FROM
-                    zone
-                    JOIN parcel_zone
-                        ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                    zone_{Fitxer}
+                    JOIN parcel_zone_{Fitxer}
+                        ON (zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference)
                     JOIN habitatge{Fitxer} AS hab
-                        ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                        ON (parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference)
                 WHERE
-                    zone.cadastral_zoning_reference NOT LIKE ''
+                    zone_{Fitxer}.cadastral_zoning_reference NOT LIKE ''
             )
             """
-            query = f"""(SELECT DISTINCT ON (hab.id_parcel) hab.id_parcel, hab.cadastral_reference, hab."SupCons", hab.date_of_construction, hab.geom, zone.id_zone AS id_agrupat, zone.cadastral_zoning_reference FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '')"""
+            query = f"""(SELECT DISTINCT ON (hab.id_parcel) hab.id_parcel, hab.cadastral_reference, hab."SupCons", hab.date_of_construction, hab.geom, zone_{Fitxer}.id_zone AS id_agrupat, zone_{Fitxer}.cadastral_zoning_reference FROM zone_{Fitxer} JOIN parcel_zone_{Fitxer} ON zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference WHERE zone_{Fitxer}.cadastral_zoning_reference NOT LIKE '')"""
         else:
             f"""
             (
@@ -1683,19 +1707,19 @@ class Indicadors_Habitatge:
                     hab."SupCons",
                     hab.date_of_construction,
                     hab.geom,
-                    zone.id_zone AS id_agrupat,
-                    zone.cadastral_zoning_reference
+                    zone_{Fitxer}.id_zone AS id_agrupat,
+                    zone_{Fitxer}.cadastral_zoning_reference
                 FROM
-                    zone
-                    JOIN parcel_zone
-                        ON (zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference)
+                    zone_{Fitxer}
+                    JOIN parcel_zone_{Fitxer}
+                        ON (zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference)
                     JOIN habitatge{Fitxer} AS hab
-                        ON (parcel_zone.cadastral_reference = hab.cadastral_reference)
+                        ON (parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference)
                 WHERE
-                    zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%'
+                    zone_{Fitxer}.cadastral_zoning_reference NOT LIKE '' AND zone_{Fitxer}.type LIKE '%MAN%'
             )
             """
-            query = f"""(SELECT hab.id_parcel, hab.cadastral_reference, hab."SupCons", hab.date_of_construction, hab.geom, zone.id_zone AS id_agrupat, zone.cadastral_zoning_reference FROM zone JOIN parcel_zone ON zone.cadastral_zoning_reference = parcel_zone.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone.cadastral_reference = hab.cadastral_reference WHERE zone.cadastral_zoning_reference NOT LIKE '' AND zone.type LIKE '%MAN%')"""
+            query = f"""(SELECT hab.id_parcel, hab.cadastral_reference, hab."SupCons", hab.date_of_construction, hab.geom, zone_{Fitxer}.id_zone AS id_agrupat, zone_{Fitxer}.cadastral_zoning_reference FROM zone_{Fitxer} JOIN parcel_zone_{Fitxer} ON zone_{Fitxer}.cadastral_zoning_reference = parcel_zone_{Fitxer}.cadastral_zoning_reference JOIN habitatge{Fitxer} AS hab ON parcel_zone_{Fitxer}.cadastral_reference = hab.cadastral_reference WHERE zone_{Fitxer}.cadastral_zoning_reference NOT LIKE '' AND zone_{Fitxer}.type LIKE '%MAN%')"""
         uri.setDataSource("", query, "geom", "", "id_parcel")
         ###uri.setDataSource("", query, "geom", "", "id_agrupat")
         vlayer_resultat = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
@@ -1711,9 +1735,9 @@ class Indicadors_Habitatge:
         vlayer_calculat = self.procesoModaPonderadaIlles(vlayer_resultat)
         QgsProject.instance().addMapLayer(vlayer_calculat, False)
         if versio_db == '1.0':
-            uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL)", "geom", "", "id_zone")
+            uri.setDataSource("", f"(SELECT * FROM zone_{Fitxer} WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL)", "geom", "", "id_zone")
         else:
-            uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL AND zone.type LIKE '%MAN%')", "geom", "", "id_zone")
+            uri.setDataSource("", f"(SELECT * FROM zone_{Fitxer} WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL AND zone_{Fitxer}.type LIKE '%MAN%')", "geom", "", "id_zone")
         entitatResum = QgsVectorLayer(uri.uri(False), "Resum", "postgres")
         entitatResum = self.comprobarValidez(entitatResum)
         QApplication.processEvents()
@@ -1758,9 +1782,9 @@ class Indicadors_Habitatge:
     def agregacio(self, indicador, uri, vlayer):
         """Aquesta funció realitza l'agregació de les entitats"""
         if self.dlg.Cmb_Metode.currentText() == "ILLES":
-            uri.setDataSource("", "(SELECT * FROM zone WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL)", "geom", "", "id_zone")
+            uri.setDataSource("", f"(SELECT * FROM zone_{Fitxer} WHERE cadastral_zoning_reference NOT LIKE '' AND cadastral_zoning_reference IS NOT NULL)", "geom", "", "id_zone")
         elif self.dlg.Cmb_Metode.currentText() == "PARCELES":
-            uri.setDataSource("", "(SELECT * FROM parcel_temp)", "geom", "", "id_parcel")
+            uri.setDataSource("", f"(SELECT * FROM parcel_temp_{Fitxer})", "geom", "", "id_parcel")
         elif self.dlg.Cmb_Metode.currentText() == "SECCIONS":
             uri.setDataSource("", "(SELECT * FROM seccions)", "geom", "", "id")
         elif self.dlg.Cmb_Metode.currentText() == "BARRIS":
