@@ -52,7 +52,7 @@ from .resources import *
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.240913"
+Versio_modul = "V_Q3.240923"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -63,6 +63,7 @@ Fitxer = ""
 versio_db = ""
 cur = None
 conn = None
+connexioFeta = False
 Path_Inicial = expanduser("~")
 Llista_Metodes = ["ILLES", "PARCELES", "SECCIONS", "BARRIS", "DISTRICTES POSTALS", "DISTRICTES INE"]
 Llista_Camps_Metodes = [f"zone_{Fitxer}", f"parcel_temp_{Fitxer}", "seccions", "barris", "districtes_postals", "districtes"]
@@ -109,6 +110,8 @@ class Indicadors_Habitatge:
         self.dlg.RB_degradat.toggled.connect(self.on_checkRB_degradat)
         self.dlg.Transparencia.valueChanged.connect(self.on_valuechange_Transparencia)
         self.dlg.tabWidget.currentChanged.connect(self.on_currentchange_tab)
+
+        self.dlg.rejected.connect(self.on_click_Sortir)
 
         # Declare instance attributes
         self.actions = []
@@ -225,8 +228,30 @@ class Indicadors_Habitatge:
             parent=self.iface.mainWindow())
 
     def on_click_Sortir(self):
+        global connexioFeta
         """Tanca la finestra del plugin"""
         self.estatInicial()
+        if connexioFeta:
+            drop = f'DROP TABLE IF EXISTS parcel_temp_{Fitxer};\n'
+            drop += f"DROP TABLE IF EXISTS zone_{Fitxer};\n"
+            drop += f"DROP TABLE IF EXISTS address_{Fitxer};\n"
+            drop += f"DROP TABLE IF EXISTS building_{Fitxer};\n"
+            drop += f"DROP TABLE IF EXISTS building_floor_{Fitxer};\n"
+            drop += f"DROP TABLE IF EXISTS parcel_zone_{Fitxer};\n"
+            try:
+                cur.execute(drop)
+                conn.commit()
+            except Exception as ex:
+                print("Error DROP final")
+                template = "An exception of type {0} occurred. Arguments:\n{1!r}"
+                message = template.format(type(ex).__name__, ex.args)
+                print(message)
+                QMessageBox.information(None, "Error", "Error DROP final")
+                conn.rollback()
+                self.progress_changed(0)
+                self.dlg.setEnabled(True)
+                self.barraEstat_connectat()
+            connexioFeta = False
         self.dlg.close()
 
     def getConnections(self):
@@ -300,6 +325,7 @@ class Indicadors_Habitatge:
         global conn
         global Llista_Metodes
         global Llista_Camps_Metodes
+        global connexioFeta
 
         s = QSettings()
         select = 'Selecciona connexió'
@@ -336,6 +362,7 @@ class Indicadors_Habitatge:
 
                 try:
                     self.detect_database_version()
+                    connexioFeta = True
                 except Exception as ex:
                     print("No s'ha pogut detectar la versio de la BBDD")
                     template = "An exception of type {0} occurred. Arguments:\n{1!r}"
@@ -1304,7 +1331,6 @@ class Indicadors_Habitatge:
         global Fitxer
 
         QApplication.processEvents()
-        Fitxer = datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
         self.progress_changed(0)
 
         '''Control d'errors'''
@@ -2247,11 +2273,15 @@ class Indicadors_Habitatge:
             self.toolbar.removeAction(action)
 
     def run(self):
+        global Fitxer
+        global Llista_Camps_Metodes
         """Run method that performs all the real work"""
         # show the dialog
         self.estatInicial()
         self.dlg.show()
         conn = self.getConnections()
+        Fitxer = "ccu_temp_"+datetime.datetime.now().strftime("%Y%m%d%H%M%S%f")
+        Llista_Camps_Metodes = [f"zone_{Fitxer}", f"parcel_temp_{Fitxer}", "seccions", "barris", "districtes_postals", "districtes"]
         # Run the dialog event loop
         self.populateComboBox(self.dlg.comboConnexio, conn, 'Selecciona connexió', True)
         result = self.dlg.exec_()
