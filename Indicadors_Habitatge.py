@@ -27,7 +27,7 @@ import os
 import os.path
 from os.path import expanduser
 
-import processing
+import processing # type: ignore
 import psycopg2
 from PyQt5.QtCore import *
 from PyQt5.QtGui import *
@@ -39,8 +39,10 @@ from qgis.core import (Qgis, QgsDataSourceUri, QgsFeature, QgsField,
                        QgsGraduatedSymbolRenderer, QgsLayerTreeLayer,
                        QgsPalLayerSettings, QgsProcessingFeedback,
                        QgsProject, QgsRenderContext,
-                       QgsRendererRangeLabelFormat, QgsTextFormat,
-                       QgsVectorLayer, QgsVectorLayerSimpleLabeling)
+                       QgsTextFormat, QgsVectorLayer, QgsVectorLayerSimpleLabeling,
+                       QgsClassificationEqualInterval, QgsClassificationJenks,
+                       QgsClassificationQuantile, QgsClassificationPrettyBreaks,
+                       QgsClassificationStandardDeviation)
 from qgis.utils import iface
 
 # Import the code for the dialog
@@ -52,7 +54,7 @@ from .resources import *
 Variables globals per a la connexio
 i per guardar el color dels botons
 """
-Versio_modul = "V_Q3.240923"
+Versio_modul = "V_Q3.250217"
 nomBD1 = ""
 contra1 = ""
 host1 = ""
@@ -952,7 +954,7 @@ class Indicadors_Habitatge:
                                     cadastral_reference,
                                     MAX(
                                         CASE
-                                            WHEN floor ~ '^[0-9\.]+$' THEN
+                                            WHEN floor ~ '^[0-9\\.]+$' THEN
                                                 CAST(floor AS INTEGER) + 1
                                             ELSE
                                                 (
@@ -969,7 +971,7 @@ class Indicadors_Habitatge:
                                 FROM
                                     building_floor_{Fitxer}
                                 WHERE
-                                    floor ~ '^[0-9\.]+$'
+                                    floor ~ '^[0-9\\.]+$'
                                     OR floor IN ('0', '00', 'BX', 'BJ', 'OD', 'OP', 'OA')
                                     OR (floor LIKE 'UE' AND stairs LIKE 'S')
                                 GROUP BY
@@ -1076,35 +1078,29 @@ class Indicadors_Habitatge:
                     elif (self.dlg.ColorDegradat.currentText() == 'Verd'):
                         colorRamp = QgsGradientColorRamp(QColor(154, 255, 154), QColor(0, 154, 0))
 
-                    format = QgsRendererRangeLabelFormat()
-
                     precision = 3
                     if self.dlg.tabWidget.currentIndex() == 1:
                         precision = 0
-                    format.setFormat(template)
-                    format.setPrecision(precision)
-                    format.setTrimTrailingZeroes(False)
+
+                    renderer = QgsGraduatedSymbolRenderer()
+                    renderer.setClassAttribute(fieldname)
+                    renderer.setSourceSymbol(mysymbol)
+                    renderer.setSourceColorRamp(colorRamp)
                     if (self.dlg.combo_Tipus.currentText() == 'Quantil'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
-                                                                             QgsGraduatedSymbolRenderer.Quantile,
-                                                                             mysymbol, colorRamp)
+                        classification_method = QgsClassificationQuantile()
                     elif (self.dlg.combo_Tipus.currentText() == 'Interval igual'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
-                                                                             QgsGraduatedSymbolRenderer.EqualInterval,
-                                                                             mysymbol, colorRamp)
+                        classification_method = QgsClassificationEqualInterval()
                     elif (self.dlg.combo_Tipus.currentText() == 'Ruptures naturals'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
-                                                                             QgsGraduatedSymbolRenderer.Jenks, mysymbol,
-                                                                             colorRamp)
+                        classification_method = QgsClassificationJenks()
                     elif (self.dlg.combo_Tipus.currentText() == 'Desviació estandard'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
-                                                                             QgsGraduatedSymbolRenderer.StdDev,
-                                                                             mysymbol, colorRamp)
+                        classification_method = QgsClassificationStandardDeviation()
                     elif (self.dlg.combo_Tipus.currentText() == 'Pretty breaks'):
-                        renderer = QgsGraduatedSymbolRenderer.createRenderer(vlayer_temp, fieldname, numberOfClasses,
-                                                                             QgsGraduatedSymbolRenderer.Pretty,
-                                                                             mysymbol, colorRamp)
-                    renderer.setLabelFormat(format, True)
+                        classification_method = QgsClassificationPrettyBreaks()
+                    classification_method.setLabelFormat(template)
+                    classification_method.setLabelPrecision(precision)
+                    classification_method.setLabelTrimTrailingZeroes(False)
+                    renderer.setClassificationMethod(classification_method)
+                    renderer.updateClasses(vlayer_temp, numberOfClasses)
                     vlayer_temp.setOpacity(self.dlg.Transparencia.value() / 100)
                     vlayer_temp.setRenderer(renderer)
                     QApplication.processEvents()
@@ -1113,7 +1109,7 @@ class Indicadors_Habitatge:
                     layer_settings = QgsPalLayerSettings()
                     text_format = QgsTextFormat()
 
-                    text_format.setFont(QFont("Arial", self.dlg.mida.value()))
+                    text_format.setFont(QFont("Arial", int(self.dlg.mida.value())))
                     text_format.setSize(self.dlg.mida.value())
 
                     text_format.setColor(QColor.fromRgb(micolorTag.red(), micolorTag.green(), micolorTag.blue()))
@@ -1980,7 +1976,7 @@ class Indicadors_Habitatge:
 
     def progress_changed(self, progress):
         """Aquesta funció canvia el progrés de la barra de progrés segons el valor del paràmetre"""
-        self.dlg.progressBar.setValue(progress)
+        self.dlg.progressBar.setValue(int(progress))
 
     def AgregacioQGIS(self, Entitat_Resum, Entitat_Detall, operacion, camp, tipus, operacio_aggregate, indicador,
                       aggregate):
